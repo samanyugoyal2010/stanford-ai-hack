@@ -11,7 +11,11 @@ const crypto = require("node:crypto");
 const DEV = process.env.ELECTRON_DEV === "1";
 const AGENT_PORT = 47823;      // uncommon, baked into the web build's CSP/WS url
 const WEB_PORT = Number(process.env.WEB_PORT) || (DEV ? 3000 : 47824);
-const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
+// MUST be "localhost", not "127.0.0.1": Next dev's HMR websocket rejects a
+// 127.0.0.1 origin (ERR_INVALID_HTTP_RESPONSE), and with Turbopack a dead HMR
+// socket blocks hydration → the UI renders but nothing is clickable.
+const WEB_HOST = "localhost";
+const WEB_URL = `http://${WEB_HOST}:${WEB_PORT}`;
 const DARK_BG = "#0b0b0c";
 
 let mainWin = null;
@@ -57,7 +61,7 @@ function startServers() {
   // Web (Next standalone) serves the UI + the /api settings routes (JSON store).
   spawnServer("web", "web/server.js", {
     PORT: String(WEB_PORT),
-    HOSTNAME: "127.0.0.1",
+    HOSTNAME: WEB_HOST,
     NODE_ENV: "production",
     OPENLIVE_DATA_DIR: dataDir,
     OPENLIVE_AGENT_SECRET: secret,
@@ -115,7 +119,7 @@ function createMainWindow() {
   mainWin.once("ready-to-show", () => {
     mainWin.show();
     if (splashWin) splashWin.close();
-    if (DEV) mainWin.webContents.openDevTools({ mode: "detach" });
+    // DevTools available via View menu / Cmd+Opt+I — not auto-opened (it covered the UI).
   });
   mainWin.on("closed", () => { mainWin = null; });
 }
