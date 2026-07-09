@@ -20,7 +20,7 @@ export function SettingsModal() {
         <motion.div variants={overlay} initial="hidden" animate="show" exit="exit"
           className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" onClick={close}>
           <motion.div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Settings" tabIndex={-1}
-            variants={modal} className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl outline-none" onClick={(e) => e.stopPropagation()}>
+            variants={modal} className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-background text-left shadow-2xl outline-none" onClick={(e) => e.stopPropagation()}>
             <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
               <span className="text-[14px] font-semibold">Settings</span>
               <button onClick={close} aria-label="Close settings" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground"><X className="size-4" /></button>

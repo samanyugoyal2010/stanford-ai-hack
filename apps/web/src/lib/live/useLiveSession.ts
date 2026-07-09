@@ -48,7 +48,7 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
     disposeModels();                                             // frees the WebGPU worker
     client.current = null; engine.current = null; cam.current = null;
     // Keep `error` so the user sees why it ended; start() clears it next time.
-    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, muted: false, pttEnabled: false, cameraStream: null, turns: [], userCaption: "", userPartial: false, agentCaption: "" });
+    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, pttEnabled: false, cameraStream: null, turns: [], userCaption: "", userPartial: false, agentCaption: "" });
   }, [chatId, set]);
 
   const start = useCallback(async () => {
@@ -154,7 +154,7 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
         },
         onNeedFrame: async (reqId) => {
           const camera = cam.current;
-          if (!camera || !useLiveStore.getState().cameraOn) { client.current?.frameResponse(reqId); return; }
+          if (!camera || !(useLiveStore.getState().cameraOn || useLiveStore.getState().screenOn)) { client.current?.frameResponse(reqId); return; }
           const jpeg = await camera.captureHiRes();
           client.current?.frameResponse(reqId);   // server arms for the look frame FIRST
           if (jpeg) client.current?.sendFrame(jpeg);
@@ -177,7 +177,7 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
   // A completed user turn: attach the freshest camera frame, send the text, and
   // reflect the exchange in the chat store (so it renders + persists like typing).
   const handleUserText = useCallback(async (text: string) => {
-    if (useLiveStore.getState().cameraOn && cam.current) {
+    if ((useLiveStore.getState().cameraOn || useLiveStore.getState().screenOn) && cam.current) {
       const jpeg = await cam.current.captureFreshest();
       if (jpeg) client.current?.sendFrame(jpeg);
     }
@@ -270,6 +270,7 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
   const toggleCamera = useCallback(async () => {
     const on = !useLiveStore.getState().cameraOn;
     if (on) {
+      if (useLiveStore.getState().screenOn) { cam.current?.stop(); cam.current = null; client.current?.control("camera_off"); set({ screenOn: false }); }
       const camera = new CameraCapture();
       cam.current = camera;
       try {
@@ -291,8 +292,40 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
     }
   }, [set, refreshDevices]);
 
+  // Share a screen/window. One visual source at a time, so it turns the camera
+  // off. The model sees the shared screen through the same frame pipeline.
+  const toggleScreen = useCallback(async () => {
+    const on = !useLiveStore.getState().screenOn;
+    if (on) {
+      if (useLiveStore.getState().cameraOn) { cam.current?.stop(); cam.current = null; client.current?.control("camera_off"); set({ cameraOn: false, cameraStream: null }); }
+      const cap = new CameraCapture();
+      cam.current = cap;
+      try {
+        await cap.startScreen(() => {
+          // user hit "Stop sharing" in the OS/browser bar
+          client.current?.control("camera_off");
+          try { cam.current?.stop(); } catch { /* */ }
+          cam.current = null;
+          set({ screenOn: false });
+        });
+      } catch {
+        try { cap.stop(); } catch { /* */ }
+        cam.current = null;
+        set({ error: "Screen share was cancelled." });
+        return;
+      }
+      client.current?.control("camera_on");
+      set({ screenOn: true });
+    } else {
+      client.current?.control("camera_off");
+      cam.current?.stop();
+      cam.current = null;
+      set({ screenOn: false });
+    }
+  }, [set]);
+
   const getLevels = useCallback(() => ({ mic: engine.current?.micLevel() ?? 0, agent: engine.current?.agentLevel() ?? 0 }), []);
   const getSpeechProgress = useCallback(() => engine.current?.speechProgress() ?? 1, []);
 
-  return { start, stop, download, toggleMute, setPtt, holdTalk, toggleCamera, getLevels, getSpeechProgress, refreshDevices, setMic, setCam };
+  return { start, stop, download, toggleMute, setPtt, holdTalk, toggleCamera, toggleScreen, getLevels, getSpeechProgress, refreshDevices, setMic, setCam };
 }
