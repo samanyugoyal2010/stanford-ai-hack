@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useReducedMotion } from "motion/react";
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Hand } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, PhoneOff, Hand, ScreenShare, ScreenShareOff } from "lucide-react";
 import { useLiveStore, type LivePhase } from "@/lib/live/liveStore";
 import { Orb } from "./Orb";
 import { CameraPiP } from "./CameraPiP";
@@ -18,13 +18,13 @@ const PHASE_LABEL: Record<LivePhase, string> = {
 // beneath it; the running transcript sits in a panel on the right; a slim control
 // bar floats at the bottom; the camera is a draggable PiP.
 export function InCall({
-  chatId, phase, muted, pttEnabled, cameraOn, cameraStream, error,
-  toggleMute, setPtt, holdTalk, toggleCamera, getLevels, onEnd,
+  chatId, phase, muted, pttEnabled, cameraOn, screenOn, cameraStream, error,
+  toggleMute, setPtt, holdTalk, toggleCamera, toggleScreen, getLevels, onEnd,
 }: {
-  chatId: string; phase: LivePhase; muted: boolean; pttEnabled: boolean; cameraOn: boolean;
+  chatId: string; phase: LivePhase; muted: boolean; pttEnabled: boolean; cameraOn: boolean; screenOn: boolean;
   cameraStream: MediaStream | null; error?: string;
   toggleMute: () => void; setPtt: (v: boolean) => void; holdTalk: (v: boolean) => void;
-  toggleCamera: () => void | Promise<void>; getLevels: () => { mic: number; agent: number }; onEnd: () => void;
+  toggleCamera: () => void | Promise<void>; toggleScreen: () => void | Promise<void>; getLevels: () => { mic: number; agent: number }; onEnd: () => void;
 }) {
   const { userCaption, userPartial, agentCaption, agentCaptionMs } = useLiveStore();
   const reduce = useReducedMotion();
@@ -91,6 +91,7 @@ export function InCall({
             <IconBtn on={!muted} title={muted ? "Unmute" : "Mute"} onClick={toggleMute} icon={muted ? MicOff : Mic} danger={muted} />
           )}
           <IconBtn on={cameraOn} title={cameraOn ? "Turn camera off" : "Turn camera on"} onClick={() => void toggleCamera()} icon={cameraOn ? Video : VideoOff} />
+          <IconBtn on={screenOn} title={screenOn ? "Stop sharing screen" : "Share screen"} onClick={() => void toggleScreen()} icon={screenOn ? ScreenShareOff : ScreenShare} />
           <button onClick={onEnd} title="End call" aria-label="End call"
             className="grid size-9 place-items-center rounded-full bg-danger text-white transition hover:opacity-90 active:scale-95">
             <PhoneOff className="size-4" />

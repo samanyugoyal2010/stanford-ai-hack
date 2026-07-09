@@ -2,7 +2,7 @@
 // OpenLive desktop shell. Runs the web (Next) + agent (ws) servers locally and
 // shows the UI in a native window. Everything is on localhost — the voice models
 // run in the renderer (Chromium/WebGPU), the LLM call goes out from the agent.
-const { app, BrowserWindow, session, shell, dialog } = require("electron");
+const { app, BrowserWindow, session, shell, dialog, desktopCapturer } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
@@ -41,6 +41,15 @@ function wirePermissions() {
     cb(permission === "media" || permission === "clipboard-read" || permission === "clipboard-sanitized-write");
   });
   ses.setPermissionCheckHandler((_wc, permission) => permission === "media");
+
+  // Screen share: without a handler, getDisplayMedia() fails in Electron. Prefer
+  // the native OS picker (lets the user choose a screen/window); fall back to the
+  // primary screen so sharing always works.
+  ses.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ["screen", "window"] })
+      .then((sources) => callback(sources[0] ? { video: sources[0] } : {}))
+      .catch(() => callback({}));
+  }, { useSystemPicker: true });
 }
 
 // ── server processes (prod only; in dev they're started by `pnpm dev`) ───────
