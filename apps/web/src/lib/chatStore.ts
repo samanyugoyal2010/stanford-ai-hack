@@ -66,6 +66,20 @@ export const chatStore = {
   reset(chatId: string) {
     useChatState.getState()._set(chatId, () => []);
   },
+  // Load a saved conversation's transcript for viewing.
+  hydrate(chatId: string, messages: { role: string; content: { type: string; text?: string; tool?: string; summary?: string; detail?: string }[] }[]) {
+    const msgs: ChatMsg[] = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m, i) => ({
+        id: `h${i}`,
+        role: m.role as "user" | "assistant",
+        text: m.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join(""),
+        tools: m.content.filter((b) => b.type === "tool").map((b) => ({ tool: b.tool ?? "", summary: b.summary, detail: b.detail })),
+        done: true,
+      }))
+      .filter((m) => m.text.trim() || m.tools.length);
+    useChatState.getState()._set(chatId, () => msgs);
+  },
 };
 
 const EMPTY: ChatMsg[] = [];
