@@ -7,6 +7,14 @@ import { api } from "@/lib/api";
 import { useUi } from "@/lib/uiStore";
 import { cn } from "@/lib/cn";
 
+// Running inside the desktop app on macOS? Then leave room for the window's
+// traffic-light buttons and make the bar draggable.
+const isMacDesktop = typeof navigator !== "undefined"
+  && /Electron/i.test(navigator.userAgent)
+  && /Mac/i.test(navigator.userAgent);
+const isDesktop = typeof navigator !== "undefined" && /Electron/i.test(navigator.userAgent);
+const noDrag = isDesktop ? "[-webkit-app-region:no-drag]" : "";
+
 function relTime(iso: string): string {
   const t = new Date(iso).getTime();
   if (!t) return "";
@@ -40,7 +48,7 @@ function Conversations() {
   };
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={cn("relative", noDrag)}>
       <button onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground">
         <MessageSquare className="size-4" /> Conversations <ChevronDown className={cn("size-3.5 transition", open && "rotate-180")} />
@@ -72,22 +80,25 @@ function Conversations() {
   );
 }
 
-// The persistent top bar during a live session: logo, conversation history,
-// settings (openable mid-call), and minimize to the floating overlay.
+// The persistent top bar: logo, conversation history, settings (openable mid-
+// call), minimize. Draggable in the desktop app; leaves room for the macOS
+// traffic-light buttons.
 export function TopBar() {
   const openSettings = useUi((s) => s.openSettings);
   const setMinimized = useUi((s) => s.setMinimized);
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
+    <header className={cn("flex h-12 shrink-0 items-center justify-between border-b border-border pr-3",
+      isMacDesktop ? "pl-[80px]" : "pl-3",
+      isDesktop && "[-webkit-app-region:drag]")}>
       <div className="flex items-center gap-1">
-        <div className="flex items-center gap-2 pl-1 pr-3">
+        <div className="flex items-center gap-2 pr-3">
           <div className="grid size-7 place-items-center rounded-lg bg-accent/12 text-accent"><AudioLines className="size-4" /></div>
           <span className="text-[14px] font-semibold tracking-tight">OpenLive</span>
         </div>
         <Conversations />
       </div>
-      <div className="flex items-center gap-1">
+      <div className={cn("flex items-center gap-1", noDrag)}>
         <button onClick={openSettings} title="Settings" aria-label="Settings"
           className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground"><Settings2 className="size-4" /></button>
         <button onClick={() => setMinimized(true)} title="Minimize to floating bar" aria-label="Minimize"

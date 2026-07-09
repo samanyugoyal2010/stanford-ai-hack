@@ -2,7 +2,7 @@
 // OpenLive desktop shell. Runs the web (Next) + agent (ws) servers locally and
 // shows the UI in a native window. Everything is on localhost — the voice models
 // run in the renderer (Chromium/WebGPU), the LLM call goes out from the agent.
-const { app, BrowserWindow, session, shell, dialog, desktopCapturer } = require("electron");
+const { app, BrowserWindow, session, shell, dialog, desktopCapturer, ipcMain, screen } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
@@ -141,8 +141,41 @@ function createMainWindow() {
   mainWin.on("closed", () => { mainWin = null; });
 }
 
+// ── minimized (floating overlay) mode ───────────────────────────────────────
+let savedBounds = null;
+function positionFloating(w, h) {
+  if (!mainWin) return;
+  const area = screen.getDisplayMatching(mainWin.getBounds()).workArea;
+  mainWin.setMinimumSize(Math.min(320, w), Math.min(80, h));
+  mainWin.setBounds({ width: w, height: h, x: area.x + area.width - w - 24, y: area.y + area.height - h - 24 });
+}
+function wireMiniIpc() {
+  ipcMain.on("openlive:mini", (_e, { width, height }) => {
+    if (!mainWin) return;
+    if (!savedBounds) savedBounds = mainWin.getBounds();
+    mainWin.setResizable(false);
+    positionFloating(width || 520, height || 120);
+    mainWin.setAlwaysOnTop(true, "floating");
+    mainWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    if (process.platform === "darwin" && mainWin.setWindowButtonVisibility) mainWin.setWindowButtonVisibility(false);
+  });
+  ipcMain.on("openlive:size", (_e, { width, height }) => {
+    if (mainWin && mainWin.isAlwaysOnTop()) positionFloating(width || 520, height || 120);
+  });
+  ipcMain.on("openlive:unmini", () => {
+    if (!mainWin) return;
+    mainWin.setAlwaysOnTop(false);
+    mainWin.setVisibleOnAllWorkspaces(false);
+    mainWin.setResizable(true);
+    mainWin.setMinimumSize(940, 640);
+    if (savedBounds) { mainWin.setBounds(savedBounds); savedBounds = null; }
+    if (process.platform === "darwin" && mainWin.setWindowButtonVisibility) mainWin.setWindowButtonVisibility(true);
+  });
+}
+
 async function boot() {
   wirePermissions();
+  wireMiniIpc();
   createSplash();
   startServers();
   const ok = await waitForWeb();
