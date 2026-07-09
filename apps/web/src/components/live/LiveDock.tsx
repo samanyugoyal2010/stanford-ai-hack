@@ -13,8 +13,8 @@ import { InCall } from "./InCall";
 // mic/camera, model download, model pick), then the full-screen in-call view
 // (orb + transcript) once active.
 export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => void }) {
-  const { start, stop, download, toggleMute, setPtt, holdTalk, toggleCamera, toggleScreen, getLevels, refreshDevices, setMic, setCam } = useLiveSession(chatId, null);
-  const { active, phase, modelsDownloaded, downloading, downloadPct, downloadLoaded, downloadTotal, downloadModels, muted, pttEnabled, cameraOn, screenOn, cameraStream, error, mics, cams, micId, camId } = useLiveStore();
+  const { start, stop, download, toggleMute, setPtt, holdTalk, toggleCamera, toggleScreen, changeScreen, getLevels, refreshDevices, setMic, setCam } = useLiveSession(chatId, null);
+  const { active, phase, modelsDownloaded, downloading, downloadPct, downloadLoaded, downloadTotal, downloadModels, muted, pttEnabled, cameraOn, screenOn, cameraStream, screenStream, error, mics, cams, micId, camId } = useLiveStore();
   const openSettings = useUi((s) => s.openSettings);
 
   useEffect(() => { void refreshDevices(); }, [refreshDevices]);
@@ -48,9 +48,10 @@ export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => voi
 
       {active && (
         <InCall chatId={chatId} phase={phase} muted={muted} pttEnabled={pttEnabled} cameraOn={cameraOn} screenOn={screenOn}
-          cameraStream={cameraStream} error={error}
-          toggleMute={toggleMute} setPtt={setPtt} holdTalk={holdTalk} toggleCamera={toggleCamera} toggleScreen={toggleScreen}
-          getLevels={getLevels} onEnd={end} />
+          cameraStream={cameraStream} screenStream={screenStream} error={error}
+          mics={mics} cams={cams} micId={micId} camId={camId}
+          toggleMute={toggleMute} setPtt={setPtt} holdTalk={holdTalk} toggleCamera={toggleCamera} toggleScreen={toggleScreen} changeScreen={changeScreen}
+          setMic={setMic} setCam={setCam} getLevels={getLevels} onEnd={end} />
       )}
     </>
   );

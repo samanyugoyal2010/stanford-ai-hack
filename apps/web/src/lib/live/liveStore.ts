@@ -19,6 +19,7 @@ interface LiveState {
   pttEnabled: boolean; // push-to-talk: mic only listens while held
   cameraOn: boolean;
   screenOn: boolean;
+  screenStream: MediaStream | null;
   cameraStream: MediaStream | null;
   turns: LiveTurn[]; // running transcript (committed exchanges)
   userCaption: string;
@@ -48,6 +49,7 @@ export const useLiveStore = create<LiveState>((set) => ({
   pttEnabled: false,
   cameraOn: false,
   screenOn: false,
+  screenStream: null,
   cameraStream: null,
   turns: [],
   userCaption: "",
