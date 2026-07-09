@@ -10,7 +10,7 @@ const crypto = require("node:crypto");
 
 const DEV = process.env.ELECTRON_DEV === "1";
 const AGENT_PORT = 47823;      // uncommon, baked into the web build's CSP/WS url
-const WEB_PORT = DEV ? 3000 : 47824;
+const WEB_PORT = Number(process.env.WEB_PORT) || (DEV ? 3000 : 47824);
 const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
 const DARK_BG = "#0b0b0c";
 
