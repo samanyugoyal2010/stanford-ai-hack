@@ -1,0 +1,74 @@
+name: Release
+
+# Push a tag like v0.1.0 (must match apps/desktop/package.json "version").
+# Builds the Mac + Windows installers on their native runners and uploads them to
+# a DRAFT GitHub Release named after the tag. Review it, then hit Publish.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # electron-builder needs this to create the release + upload assets
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: mac
+          - os: windows-latest
+            name: win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Fail loudly if the tag doesn't match the packaged version — a mismatch
+      # would publish assets to the wrong release name and break auto-update.
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          PKG_VER=$(node -p "require('./apps/desktop/package.json').version")
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VER" != "$TAG_VER" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME != apps/desktop/package.json version $PKG_VER"
+            exit 1
+          fi
+
+      # Assemble the Next standalone server + the agent bundle into dist/ (these
+      # are what Electron packages as unpacked resources).
+      - name: Pack web + agent
+        run: |
+          pnpm --filter @openlive/desktop pack:web
+          pnpm --filter @openlive/desktop pack:agent
+
+      - name: Build & publish (macOS — signed + notarized)
+        if: matrix.name == 'mac'
+        run: pnpm --filter @openlive/desktop exec electron-builder --mac --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing (skipped automatically if these are unset):
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # Notarization (skipped automatically if these are unset):
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build & publish (Windows)
+        if: matrix.name == 'win'
+        run: pnpm --filter @openlive/desktop exec electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

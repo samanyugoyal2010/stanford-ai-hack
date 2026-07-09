@@ -6,6 +6,14 @@ directories:
   output: release
   buildResources: build
 
+# Where `--publish` uploads and where auto-update metadata (latest.yml /
+# latest-mac.yml) points. electron-builder creates a *draft* GitHub Release named
+# v<version> and attaches the installers; you publish it from the Releases page.
+publish:
+  provider: github
+  owner: katipally
+  repo: openlive
+
 # Only the shell code goes in the asar; the servers ride along as unpacked
 # resources (they're spawned as child Node processes).
 files:
@@ -35,9 +43,11 @@ mac:
     NSCameraUsageDescription: OpenLive uses your camera so the assistant can see what you show it.
     LSMinimumSystemVersion: "11.0"
 
-# Notarization: set mac.notarize + Apple creds in the environment (APPLE_ID,
-# APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID) to enable. Off by default so local
-# builds stay unsigned for testing.
+# Signing + notarization are fully env-driven, so nothing here needs toggling:
+#   - Signing: set CSC_LINK (base64 .p12 Developer ID Application cert) + CSC_KEY_PASSWORD.
+#   - Notarization: set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID.
+# When those are absent (local dev), electron-builder skips both and produces an
+# unsigned .dmg. In CI they come from GitHub Secrets — see .github/workflows/release.yml.
 
 dmg:
   title: OpenLive
