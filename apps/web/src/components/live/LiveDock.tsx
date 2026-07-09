@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { chatStore } from "@/lib/chatStore";
 import { PreCall } from "./LiveStage";
 import { InCall } from "./InCall";
+import { MiniBar } from "./MiniBar";
 
 // Hosts one live call: a centered setup MODAL before the call (permissions,
 // mic/camera, model download, model pick), then the full-screen in-call view
@@ -18,13 +19,15 @@ export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => voi
   const { start, stop, download, toggleMute, setPtt, holdTalk, toggleCamera, toggleScreen, getLevels, refreshDevices, setMic, setCam } = useLiveSession(chatId, null);
   const { active, phase, modelsDownloaded, downloading, downloadPct, downloadLoaded, downloadTotal, downloadModels, muted, pttEnabled, cameraOn, screenOn, cameraStream, screenStream, error, mics, cams, micId, camId } = useLiveStore();
   const openSettings = useUi((s) => s.openSettings);
+  const minimized = useUi((s) => s.minimized);
+  const setMinimized = useUi((s) => s.setMinimized);
 
   useEffect(() => { void refreshDevices(); }, [refreshDevices]);
   // Preload a resumed conversation's transcript from the saved store.
   useEffect(() => { api.messages(chatId).then((m) => chatStore.preload(chatId, m as never)).catch(() => {}); }, [chatId]);
   useEffect(() => () => stop(), [stop]);
 
-  const end = () => { stop(); onExit(); };
+  const end = () => { setMinimized(false); stop(); onExit(); };
 
   return (
     <>
@@ -50,7 +53,13 @@ export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => voi
         )}
       </AnimatePresence>
 
-      {active && (
+      {active && minimized && (
+        <MiniBar phase={phase} muted={muted} cameraOn={cameraOn} screenOn={screenOn}
+          cameraStream={cameraStream} screenStream={screenStream}
+          toggleMute={toggleMute} toggleCamera={toggleCamera} toggleScreen={toggleScreen}
+          getLevels={getLevels} onEnd={end} />
+      )}
+      {active && !minimized && (
         <InCall chatId={chatId} phase={phase} muted={muted} pttEnabled={pttEnabled} cameraOn={cameraOn} screenOn={screenOn}
           cameraStream={cameraStream} screenStream={screenStream} error={error}
           toggleMute={toggleMute} setPtt={setPtt} holdTalk={holdTalk} toggleCamera={toggleCamera} toggleScreen={toggleScreen}
