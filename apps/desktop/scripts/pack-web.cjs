@@ -25,7 +25,54 @@ console.log("[pack-web] assembling dist/web…");
 fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(dist, { recursive: true });
 
-const cp = (from, to) => { if (fs.existsSync(from)) fs.cpSync(from, to, { recursive: true }); };
+// pnpm's node_modules is a symlink farm and Next writes those links as ABSOLUTE
+// paths into the build machine's pnpm store. Copied verbatim they (a) point
+// outside the .app so macOS codesign rejects them ("invalid destination for
+// symbolic link in bundle") and (b) break at runtime on any machine lacking that
+// path. But the links themselves are load-bearing — pnpm resolves a package's
+// deps through them — so we can't just deref (that breaks resolution). Instead we
+// rewrite each in-store link as a RELATIVE path pointing inside the bundle:
+// codesign-clean, portable, and resolution-preserving.
+const storeNM = path.join(standalone, "node_modules"); // link targets live under here
+const distNM = path.join(dist, "node_modules");        // and get rebased to here
+
+// Follow a symlink to its final real target and copy that content (only used for
+// links that escape the store, e.g. workspace packages). Guards cycles.
+function copyDeref(src, dest, anc = new Set()) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, e.name), d = path.join(dest, e.name);
+    let st; try { st = fs.statSync(s); } catch { continue; }
+    if (st.isDirectory()) {
+      const real = fs.realpathSync(s);
+      if (anc.has(real)) continue;
+      copyDeref(s, d, new Set(anc).add(real));
+    } else fs.copyFileSync(s, d);
+  }
+}
+
+function mirror(src, dest) {
+  const lst = fs.lstatSync(src);
+  if (lst.isSymbolicLink()) {
+    let real; try { real = fs.realpathSync(src); } catch { return; } // broken → skip
+    const rel = path.relative(storeNM, real);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
+      copyDeref(real, dest);                          // escapes the store → deref
+    } else {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      const target = path.relative(path.dirname(dest), path.join(distNM, rel));
+      try { fs.rmSync(dest, { force: true }); } catch {}
+      fs.symlinkSync(target, dest);                   // relative, in-bundle
+    }
+  } else if (lst.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const name of fs.readdirSync(src)) mirror(path.join(src, name), path.join(dest, name));
+  } else {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+  }
+}
+const cp = (from, to) => { if (fs.existsSync(from)) mirror(from, to); };
 
 // Standalone root: node_modules (traced) + the monorepo tree with server.js at
 // apps/web/server.js. Copy the traced node_modules to dist root, and the web
@@ -35,24 +82,6 @@ cp(path.join(standalone, "apps/web"), dist); // brings server.js + .next + packa
 // Next needs static assets + public copied alongside (standalone doesn't include them).
 cp(path.join(webDir, ".next/static"), path.join(dist, ".next/static"));
 cp(path.join(webDir, "public"), path.join(dist, "public"));
-
-// pnpm's node_modules is a symlink farm and Next's standalone tracer leaves some
-// intermediate .pnpm symlinks dangling in the copy (their real target lives
-// elsewhere, so the app runs fine). macOS code-signing stat()s every file in the
-// bundle and dies on a broken link — prune them. Recurse only into real dirs so
-// pnpm's symlink cycles can't loop us.
-function pruneBrokenSymlinks(dir) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name);
-    if (entry.isSymbolicLink()) {
-      if (!fs.existsSync(p)) fs.rmSync(p, { force: true }); // existsSync follows the link
-    } else if (entry.isDirectory()) {
-      pruneBrokenSymlinks(p);
-    }
-  }
-}
-const nm = path.join(dist, "node_modules");
-if (fs.existsSync(nm)) pruneBrokenSymlinks(nm);
 
 if (!fs.existsSync(path.join(dist, "server.js"))) {
   console.error("[pack-web] ERROR: server.js not found in dist/web — check the standalone output layout.");
