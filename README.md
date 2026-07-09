@@ -23,6 +23,37 @@ chats are small JSON files on disk (AES-256-GCM for keys); no native modules.
 
 You can also run it in a browser during development: `pnpm dev` → localhost:3000.
 
+## Releasing (maintainers)
+
+CI (`.github/workflows/ci.yml`) typechecks every push/PR. Cutting a release is one
+tag — `.github/workflows/release.yml` then builds the Mac (arm64 + x64 DMG) and
+Windows (x64 NSIS) installers on their native runners and uploads them to a
+**draft** GitHub Release:
+
+```bash
+# bump the version in BOTH package.jsons, then:
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+The tag must equal `apps/desktop/package.json` "version" (the workflow fails fast
+otherwise). When it finishes, open the draft release, sanity-check the assets, and
+Publish.
+
+**Mac signing/notarization** happens automatically when these repo **Secrets** are
+set (Settings → Secrets and variables → Actions); without them the DMG builds
+unsigned:
+
+| Secret | What it is |
+|---|---|
+| `MAC_CSC_LINK` | base64 of your **Developer ID Application** `.p12` cert (`base64 -i cert.p12 \| pbcopy`) |
+| `MAC_CSC_KEY_PASSWORD` | password for that `.p12` |
+| `APPLE_ID` | your Apple ID email |
+| `APPLE_APP_SPECIFIC_PASSWORD` | app-specific password from appleid.apple.com |
+| `APPLE_TEAM_ID` | Team ID from developer.apple.com → Membership |
+
+Windows installers ship unsigned (SmartScreen shows a one-time warning); add a code
+cert later if desired — see [`apps/desktop/README.md`](apps/desktop/README.md).
+
 ## Other branches
 
 | Branch | What it is | Host |
