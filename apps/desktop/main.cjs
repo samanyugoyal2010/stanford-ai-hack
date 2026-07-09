@@ -123,6 +123,8 @@ function createMainWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      // Hand the app version to the preload (app.* isn't reachable there).
+      additionalArguments: [`--openlive-version=${app.getVersion()}`],
     },
   });
 

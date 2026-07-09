@@ -34,17 +34,16 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Fail loudly if the tag doesn't match the packaged version — a mismatch
-      # would publish assets to the wrong release name and break auto-update.
-      - name: Verify tag matches package version
+      # The git tag is the single source of truth for the version. Stamp it into
+      # the desktop package.json so electron-builder names the installers and
+      # app.getVersion() (shown in the UI) both report the released version — no
+      # manual package.json bump needed.
+      - name: Set version from tag
         shell: bash
         run: |
-          PKG_VER=$(node -p "require('./apps/desktop/package.json').version")
-          TAG_VER="${GITHUB_REF_NAME#v}"
-          if [ "$PKG_VER" != "$TAG_VER" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME != apps/desktop/package.json version $PKG_VER"
-            exit 1
-          fi
+          export V="${GITHUB_REF_NAME#v}"
+          node -e "const f='apps/desktop/package.json';const fs=require('fs');const p=JSON.parse(fs.readFileSync(f));p.version=process.env.V;fs.writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+          echo "Building version $V"
 
       # Assemble the Next standalone server + the agent bundle into dist/ (these
       # are what Electron packages as unpacked resources).

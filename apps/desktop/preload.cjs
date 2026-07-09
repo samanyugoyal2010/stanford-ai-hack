@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld("openlive", {
   unmini: () => ipcRenderer.send("openlive:unmini"),
   // True when running inside the desktop app.
   isDesktop: true,
+  // App version, passed from main via additionalArguments (set from the release tag).
+  version: (process.argv.find((a) => a.startsWith("--openlive-version=")) || "").split("=")[1] || "",
 });
