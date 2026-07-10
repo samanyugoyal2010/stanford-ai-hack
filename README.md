@@ -26,19 +26,19 @@ You can also run it in a browser during development: `pnpm dev` → localhost:30
 ## Releasing (maintainers)
 
 CI (`.github/workflows/ci.yml`) typechecks every push/PR. Cutting a release is one
-tag — no manual version bump. `.github/workflows/release.yml` stamps the version
-**from the tag** into the app, then builds the Mac (arm64 + x64 DMG) and Windows
-(x64 NSIS) installers on their native runners and uploads them to a **draft**
-GitHub Release:
+tag — no manual version bump, no manual publish. `.github/workflows/release.yml`
+stamps the version **from the tag** into the app, builds the Mac (arm64 + x64 DMG)
+and Windows (x64 NSIS) installers on their native runners, and — once both
+succeed — **publishes** the GitHub Release so it's immediately downloadable:
 
 ```bash
 git tag v0.1.1 && git push origin v0.1.1
 ```
 
-The tag is the single source of truth: the version it encodes is what
-`electron-builder` names the installers and what the app shows (Settings →
-`v0.1.1`, via `app.getVersion()`). When the run finishes, open the draft release,
-sanity-check the assets, and Publish.
+That's the whole release. The tag is the single source of truth: its version is
+what `electron-builder` names the installers and what the app shows (Settings →
+`v0.1.1`, via `app.getVersion()`). If either platform build fails, the release
+stays an unpublished draft — nothing half-built ever goes live.
 
 **Mac signing/notarization** happens automatically when these repo **Secrets** are
 set (Settings → Secrets and variables → Actions); without them the DMG builds
