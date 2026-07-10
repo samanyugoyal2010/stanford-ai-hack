@@ -1,8 +1,9 @@
 name: Release
 
-# Push a tag like v0.1.0 (must match apps/desktop/package.json "version").
-# Builds the Mac + Windows installers on their native runners and uploads them to
-# a DRAFT GitHub Release named after the tag. Review it, then hit Publish.
+# Push a tag like v0.1.0 → fully automatic release. Builds the Mac + Windows
+# installers on their native runners, uploads them to a draft GitHub Release named
+# after the tag, then (once BOTH succeed) publishes it so it's downloadable. No
+# manual step. If either build fails the release stays a draft (nothing goes live).
 on:
   push:
     tags: ['v*']
@@ -70,3 +71,15 @@ jobs:
         run: pnpm --filter @openlive/desktop exec electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Both platforms uploaded their assets to the draft release. Flip it to
+  # published (and mark it "Latest") so it's downloadable. Runs only if every
+  # build succeeded, so a half-built release never goes public.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
