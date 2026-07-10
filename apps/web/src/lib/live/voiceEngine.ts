@@ -2,6 +2,7 @@ import { MicVAD } from "@ricky0123/vad-web";
 import { AudioPlayer } from "./audioPlayback";
 import { stt, tts, hasWebGPU, turnComplete, turnModelReady } from "./models";
 import { isJunk, endsMidThought, stripMarkdown, SentenceChunker } from "./voiceText";
+import { octaveBands } from "./spectrum";
 import { perf } from "./perf";
 
 // The on-device conversation loop (replaces the old server pipeline). Silero VAD
@@ -42,6 +43,12 @@ export class VoiceEngine {
   private finalizing = false;
 
   private micRms = 0;
+  // A dedicated analyser on the mic stream → a real frequency spectrum for the orb
+  // while YOU talk (the VAD's frames only give amplitude, not per-band energy).
+  private specCtx: AudioContext | null = null;
+  private micAnalyser: AnalyserNode | null = null;
+  private micFreq: Uint8Array | null = null;
+  private micSrc: MediaStreamAudioSourceNode | null = null;
   private noiseFloor = 0.002;                     // learned room ambient (see onFrame/gate)
   private epoch = 0;                              // bumped on barge-in; stales TTS + audio
   private ttsChain: Promise<void> = Promise.resolve();
@@ -78,7 +85,32 @@ export class VoiceEngine {
       onVADMisfire: () => { if (this.phase === "listening") this.setPhase("idle"); },
     });
     await this.vad.start();
+    this.setupMicSpectrum(stream);
     this.setPhase("idle");
+  }
+
+  // Tap the mic stream with an AnalyserNode for a live frequency spectrum. Runs
+  // alongside the VAD (a MediaStream feeds many consumers); the analyser isn't
+  // connected onward, so nothing is played back (no echo).
+  private setupMicSpectrum(stream: MediaStream) {
+    try {
+      try { this.micSrc?.disconnect(); } catch { /* */ }
+      if (!this.specCtx) this.specCtx = new AudioContext();
+      const ctx = this.specCtx;
+      const a = ctx.createAnalyser();
+      a.fftSize = 256;
+      a.smoothingTimeConstant = 0.6;
+      this.micSrc = ctx.createMediaStreamSource(stream);
+      // analyser → muted gain → destination: some engines only process an analyser
+      // that's in a path to the destination. Gain 0 → silent (no echo).
+      const mute = ctx.createGain();
+      mute.gain.value = 0;
+      this.micSrc.connect(a);
+      a.connect(mute);
+      mute.connect(ctx.destination);
+      this.micAnalyser = a;
+      this.micFreq = new Uint8Array(a.frequencyBinCount);
+    } catch { this.micAnalyser = null; /* spectrum is best-effort */ }
   }
 
   /** Swap the mic mid-call (device change) — rebuild the VAD on the new stream
@@ -250,7 +282,7 @@ export class VoiceEngine {
   }
   private setPhase(p: EnginePhase) { if (p !== this.phase) { this.phase = p; this.h.onPhase(p); } }
 
-  /** Mute (push-to-talk / manual): pause listening; a held pending is dropped. */
+  /** Mute (manual / hands-free toggle): pause listening; a held pending is dropped. */
   setMuted(muted: boolean) {
     if (!this.vad) return;
     if (muted) { this.clearHold(); this.pending = null; this.micRms = 0; void this.vad.pause(); if (this.phase === "listening") this.setPhase("idle"); }
@@ -259,13 +291,23 @@ export class VoiceEngine {
 
   micLevel() { return this.micRms; }
   agentLevel() { return this.player.level(); }
-  speechProgress() { return this.player.progress(); }
+  /** N octave-band magnitudes (0..1) of YOUR voice — a real spectrum for the orb. */
+  micBands(n = 5): number[] {
+    if (!this.micAnalyser || !this.micFreq) return new Array(n).fill(0);
+    this.micAnalyser.getByteFrequencyData(this.micFreq as Uint8Array<ArrayBuffer>);
+    return octaveBands(this.micFreq, n);
+  }
+  /** Same, for the agent's voice while it speaks. */
+  agentBands(n = 5): number[] { return this.player.agentBands(n); }
 
   stop() {
     this.clearHold();
     this.epoch++;
     try { this.vad?.destroy(); } catch { /* */ }
     this.vad = null;
+    try { this.micSrc?.disconnect(); } catch { /* */ }
+    try { void this.specCtx?.close(); } catch { /* */ }
+    this.micSrc = null; this.micAnalyser = null; this.micFreq = null; this.specCtx = null;
     this.player.close();
   }
 }

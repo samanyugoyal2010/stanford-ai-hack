@@ -75,7 +75,8 @@ code-signing cert via electron-builder's `win.certificateFile` +
 
 ```
 main.cjs        Electron main: spawns the servers, media permissions, window, splash
-preload.cjs     locked-down (contextIsolation, nothing exposed)
+preload.cjs     contextIsolation on; exposes only the small `openlive` bridge
+                (window controls, mini mode, clipboard/open-url for agent tools)
 splash.html     loading screen shown until the web server answers
 resources/web   Next standalone server (dist/web) — UI + /api settings routes
 resources/agent agent.mjs (esbuild bundle) — the /live WebSocket + tools

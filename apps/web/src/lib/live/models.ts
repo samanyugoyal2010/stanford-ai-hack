@@ -1,8 +1,8 @@
 // Main-thread facade over the model Web Worker. Downloads happen ONLY when
 // loadModels() is called (on the user's click in the pre-call screen), reporting
 // an aggregate progress bar. Weights are cached by the browser Cache API AND the
-// worker is kept warm for the whole tab (see disposeModels) — so opening Live a
-// second time reuses the loaded pipelines with zero download and no shader recompile.
+// worker is kept warm for the whole tab (never torn down between calls) — so opening
+// Live a second time reuses the loaded pipelines with zero download and no shader recompile.
 export type ModelKey = "stt" | "tts" | "turn";
 export type ModelProgress = { key: ModelKey; name: string; loaded: number; total: number };
 export type LoadProgress = { pct: number; loaded: number; total: number; models: ModelProgress[] };
@@ -121,20 +121,3 @@ export async function turnComplete(audio: Float32Array): Promise<boolean> {
   return m.complete;
 }
 
-/** Called on live-mode teardown. We deliberately KEEP the worker warm (WebGPU
- *  device + loaded pipelines) for the tab's lifetime so reopening Live is instant
- *  — terminating here was the reason models "re-downloaded" and shaders recompiled
- *  every single open. The browser reclaims the worker when the tab closes. Any
- *  in-flight call from the closed session still resolves harmlessly. Use
- *  destroyModels() only for a hard reset. */
-export function disposeModels() { /* keep models warm across sessions */ }
-
-/** Hard teardown of the worker — only for a full reset (not per-call). */
-export function destroyModels() {
-  try { worker?.postMessage({ type: "dispose" }); } catch { /* */ }
-  try { worker?.terminate(); } catch { /* */ }
-  worker = null; ready = false; loading = null;
-  files.clear();
-  for (const p of pending.values()) p.reject(new Error("models disposed"));
-  pending.clear();
-}

@@ -25,37 +25,3 @@ export const sseEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export type SseEvent = z.infer<typeof sseEventSchema>;
-
-/** Encode an event as an SSE frame (server side). */
-export function encodeSse(event: SseEvent): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
-}
-
-/**
- * Stateful SSE line decoder (client side). Feed it raw chunks from a fetch
- * ReadableStream reader; it yields parsed events on complete `\n\n` frames.
- */
-export function createSseDecoder() {
-  let buffer = "";
-  return function push(chunk: string): SseEvent[] {
-    buffer += chunk;
-    const events: SseEvent[] = [];
-    let sep: number;
-    while ((sep = buffer.indexOf("\n\n")) !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      for (const line of frame.split("\n")) {
-        if (!line.startsWith("data:")) continue;
-        const payload = line.slice(5).trim();
-        if (!payload) continue;
-        try {
-          const parsed = sseEventSchema.safeParse(JSON.parse(payload));
-          if (parsed.success) events.push(parsed.data);
-        } catch {
-          // ignore malformed frame
-        }
-      }
-    }
-    return events;
-  };
-}

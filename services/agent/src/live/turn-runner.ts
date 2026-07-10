@@ -1,9 +1,15 @@
 import { streamProvider, isReasoningModel, type Message, type Effort } from "@openlive/harness";
 import { buildTaktTools, type TaktTool, type Emit } from "../tools.js";
 import { collectTurn } from "../turn.js";
-import { safeParseArgs } from "../turn-loop.js";
 import { buildLivePrompt } from "../prompt.js";
 import { resolveLive } from "../providers.js";
+
+/** Parse streamed tool-arg JSON; tolerate an empty/blank string. */
+function safeParseArgs(s: string): any {
+  const t = (s ?? "").trim();
+  if (!t) return {};
+  try { return JSON.parse(t); } catch { return {}; }
+}
 
 // Lower than a text chat's step cap ON PURPOSE. Every tool round before the model
 // speaks is dead air in a live call, so cap the worst case tightly.
@@ -83,13 +89,15 @@ export class LiveTurnRunner {
       .filter((t) => !LIVE_TOOL_DENY.has(t.name));
     const toolDefs = tools.map(({ name, description, parameters }) => ({ name, description, parameters }));
 
-    // Live wants the SMOOTHEST conversation. Auto = lowest reasoning the model
-    // supports (minimal on OpenAI, low elsewhere); a user override raises it.
+    // Live wants the SNAPPIEST conversation. Auto = thinking OFF for an instant
+    // reply — OpenAI can't fully disable it so we ask for "minimal"; Anthropic just
+    // omits the thinking block (no reasoning). A user override in Settings raises it.
+    // (MiniMax's reasoning is always-on and ignores this — see anthropic.ts.)
     const reasons = isReasoningModel(model);
     const reasoning = !reasons ? {}
       : effort ? (provider.protocol === "openai" ? { reasoningEffort: effort as string } : { effort: effort as Effort })
         : provider.protocol === "openai" ? { reasoningEffort: "minimal" as const }
-          : { effort: "low" as const };
+          : {};
 
     // Track assistant text AS it streams, so a barge-in that aborts mid-sentence
     // doesn't lose what we'd started saying.

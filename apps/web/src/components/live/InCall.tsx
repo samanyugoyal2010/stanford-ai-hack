@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
-import { Mic, MicOff, Video, VideoOff, Hand, ScreenShare, ScreenShareOff, ChevronUp } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ChevronUp, Minimize2, PanelRightOpen } from "lucide-react";
 import { useLiveStore, type LivePhase, type DeviceOpt } from "@/lib/live/liveStore";
+import { useUi } from "@/lib/uiStore";
 import { Orb } from "./Orb";
 import { CameraPiP } from "./CameraPiP";
 import { ScreenTile } from "./ScreenTile";
@@ -18,20 +19,33 @@ const PHASE_LABEL: Record<LivePhase, string> = {
 };
 
 export interface InCallProps {
-  chatId: string; phase: LivePhase; muted: boolean; pttEnabled: boolean;
+  chatId: string; phase: LivePhase; muted: boolean;
   cameraOn: boolean; screenOn: boolean; cameraStream: MediaStream | null; screenStream: MediaStream | null; error?: string;
-  toggleMute: () => void; setPtt: (v: boolean) => void; holdTalk: (v: boolean) => void;
+  toggleMute: () => void;
   toggleCamera: () => void | Promise<void>; toggleScreen: () => void | Promise<void>;
   setMic: (id: string) => void; setCam: (id: string) => void;
-  getLevels: () => { mic: number; agent: number }; onEnd: () => void;
+  getLevels: () => { mic: number; agent: number };
+  getBands: () => { mic: number[]; agent: number[] };
+  onEnd: () => void;
 }
 
 export function InCall(props: InCallProps) {
-  const { chatId, phase, muted, pttEnabled, cameraOn, screenOn, cameraStream, screenStream, error,
-    toggleMute, setPtt, holdTalk, toggleCamera, toggleScreen, setMic, setCam, getLevels, onEnd } = props;
+  const { chatId, phase, muted, cameraOn, screenOn, cameraStream, screenStream, error,
+    toggleMute, toggleCamera, toggleScreen, setMic, setCam, getLevels, getBands, onEnd } = props;
   const { userCaption, userPartial, agentCaption, agentCaptionMs, mics, cams, micId, camId } = useLiveStore();
+  const setMinimized = useUi((s) => s.setMinimized);
   const reduce = useReducedMotion();
   const sharing = cameraOn || screenOn; // orb shrinks into the bar while a visual source is on
+
+  // Transcript sidebar: resizable width + open/closed, both remembered.
+  const [panelOpen, setPanelOpen] = useState(() => (typeof window === "undefined" ? true : localStorage.getItem("ol-transcript-open") !== "0"));
+  const [panelW, setPanelW] = useState(() => {
+    if (typeof window === "undefined") return 360;
+    const v = Number(localStorage.getItem("ol-transcript-w"));
+    return v >= 280 && v <= 640 ? v : 360;
+  });
+  useEffect(() => { localStorage.setItem("ol-transcript-open", panelOpen ? "1" : "0"); }, [panelOpen]);
+  useEffect(() => { localStorage.setItem("ol-transcript-w", String(panelW)); }, [panelW]);
 
   const [agentWindow, setAgentWindow] = useState("");
   useEffect(() => {
@@ -50,19 +64,13 @@ export function InCall(props: InCallProps) {
     return () => cancelAnimationFrame(raf);
   }, [agentCaption, agentCaptionMs]);
 
-  useEffect(() => {
-    if (!pttEnabled) return;
-    const down = (e: KeyboardEvent) => { if (e.code === "Space" && !e.repeat) { e.preventDefault(); holdTalk(true); } };
-    const up = (e: KeyboardEvent) => { if (e.code === "Space") { e.preventDefault(); holdTalk(false); } };
-    window.addEventListener("keydown", down); window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, [pttEnabled, holdTalk]);
-
-  const caption = userPartial && userCaption
+  // Just the WORDS — what you're saying (interim) or what the agent is saying. The
+  // live state is shown ONCE, by the status label below (no duplicate "Listening").
+  const words = userPartial && userCaption
     ? <span className="italic text-muted-foreground">{userCaption}</span>
     : agentCaption
       ? <span className="font-medium text-foreground">{agentWindow || agentCaption}</span>
-      : <span className="text-muted-foreground">{PHASE_LABEL[phase] || "Listening…"}</span>;
+      : null;
 
   return (
     <div className={cn("fixed inset-0 z-40 flex flex-col bg-background", !reduce && "animate-live-in")}>
@@ -73,9 +81,9 @@ export function InCall(props: InCallProps) {
         <main className="relative min-w-0 flex-1 overflow-hidden">
           {!sharing && (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <Orb phase={phase} getLevels={getLevels} size={220} />
-              <p className="mt-8 max-w-xl px-6 text-center text-[20px] leading-snug tracking-tight">{caption}</p>
-              <p className="mt-2 text-[12px] uppercase tracking-wide text-faint">{PHASE_LABEL[phase]}</p>
+              <Orb phase={phase} getLevels={getLevels} getBands={getBands} size={220} />
+              <p className="mt-8 min-h-[28px] max-w-xl px-6 text-center text-[20px] leading-snug tracking-tight">{words}</p>
+              <p className="mt-1 text-[12px] uppercase tracking-wide text-faint">{PHASE_LABEL[phase]}</p>
             </div>
           )}
 
@@ -84,38 +92,39 @@ export function InCall(props: InCallProps) {
 
           {error && <p className="absolute inset-x-0 top-3 mx-auto max-w-md px-6 text-center text-[12.5px] text-danger">{error}</p>}
 
+          {!panelOpen && (
+            <button onClick={() => setPanelOpen(true)} title="Show transcript" aria-label="Show transcript"
+              className="absolute right-3 top-3 z-20 grid size-9 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition hover:text-foreground">
+              <PanelRightOpen className="size-4" />
+            </button>
+          )}
+
           {/* Status pill (orb + caption) while sharing — floats ABOVE the control bar
               so toggling a screen/camera share never resizes the bar itself. */}
           {sharing && (
             <div className="absolute bottom-[88px] left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 shadow-[0_10px_34px_-10px_rgba(0,0,0,0.4)]">
-              <Orb phase={phase} getLevels={getLevels} size={26} />
-              <span className="max-w-[260px] truncate text-[12.5px]" aria-live="polite">{caption}</span>
+              <Orb phase={phase} getLevels={getLevels} getBands={getBands} size={26} />
+              <span className="max-w-[260px] truncate text-[12.5px]" aria-live="polite">
+                {words ?? <span className="text-muted-foreground">{PHASE_LABEL[phase]}</span>}
+              </span>
             </div>
           )}
 
           {/* control bar — a stable width regardless of sharing */}
           <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-surface px-2.5 py-2 shadow-[0_10px_34px_-10px_rgba(0,0,0,0.4)]">
-            <IconBtn on={pttEnabled} title={pttEnabled ? "Switch to hands-free" : "Push-to-talk"} onClick={() => setPtt(!pttEnabled)} icon={Hand} />
-            {pttEnabled ? (
-              <button onPointerDown={() => holdTalk(true)} onPointerUp={() => holdTalk(false)} onPointerLeave={() => holdTalk(false)}
-                className={cn("select-none rounded-full px-4 py-2 text-[12px] font-medium transition", muted ? "bg-foreground/[0.06] text-muted-foreground" : "bg-accent text-accent-foreground")}>
-                {muted ? "Hold · Space" : "Listening"}
-              </button>
-            ) : (
-              <ControlWithMenu on={!muted} icon={muted ? MicOff : Mic} danger={muted} title={muted ? "Unmute" : "Mute"} onClick={toggleMute}
-                devices={mics} activeId={micId} onPick={setMic} label="Microphone" />
-            )}
+            <ControlWithMenu on={!muted} icon={muted ? MicOff : Mic} danger={muted} title={muted ? "Unmute" : "Mute"} onClick={toggleMute}
+              devices={mics} activeId={micId} onPick={setMic} label="Microphone" />
             <ControlWithMenu on={cameraOn} icon={cameraOn ? Video : VideoOff} title={cameraOn ? "Turn camera off" : "Turn camera on"} onClick={() => void toggleCamera()}
               devices={cams} activeId={camId} onPick={setCam} label="Camera" />
             <IconBtn on={screenOn} title={screenOn ? "Stop sharing screen" : "Share screen"} onClick={() => void toggleScreen()} icon={screenOn ? ScreenShareOff : ScreenShare} />
+            <span className="mx-0.5 h-5 w-px bg-border" />
+            <IconBtn on={false} title="Minimize to floating bar" onClick={() => setMinimized(true)} icon={Minimize2} />
             <EndCallButton onEnd={onEnd} />
           </div>
         </main>
 
-        {/* transcript sidebar */}
-        <div className="hidden w-80 shrink-0 md:block lg:w-96">
-          <TranscriptPanel chatId={chatId} />
-        </div>
+        {/* transcript sidebar — resizable + collapsible */}
+        {panelOpen && <TranscriptPanel chatId={chatId} width={panelW} onResize={setPanelW} onClose={() => setPanelOpen(false)} />}
       </div>
     </div>
   );

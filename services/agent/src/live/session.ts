@@ -12,6 +12,15 @@ type Frame = { data: string; mime: string };
 type TurnFrame = Frame & { source: "camera" | "screen" };
 const HISTORY_TURNS = 20; // recent messages to rehydrate on reconnect
 
+// Some providers (e.g. MiniMax) leak control-token fragments like "[e[" into the
+// text stream. Spoken replies never contain square brackets, so scrub them from
+// saved text blocks — the live client strips the same noise for display/TTS.
+function scrubControlTokens(blocks: MessageBlock[]): void {
+  for (const b of blocks) {
+    if (b.type === "text") b.text = b.text.replace(/[[\]][a-z0-9~!]{0,3}[[\]]/gi, " ").replace(/[[\]]/g, "").replace(/[ \t]{2,}/g, " ");
+  }
+}
+
 // Replace the assistant's spoken text in `blocks` with exactly what the client
 // says was voiced on a barge-in (live replies are plain text — a clean swap).
 function truncateSpokenText(blocks: MessageBlock[], spoken: string): void {
@@ -195,6 +204,7 @@ export class LiveSession {
       // On barge-in, persist only what was actually SPOKEN.
       if (ac.signal.aborted && this.bargeSpoken != null) truncateSpokenText(blocks, this.bargeSpoken);
       this.bargeSpoken = null;
+      scrubControlTokens(blocks);
       if (this.chatId && blocks.length) { try { addMessage(this.chatId, "assistant", blocks, true /* live */); } catch { /* */ } }
       this.send({ t: "sse", event: { type: "done" } });
       if (this.ac === ac) { this.ac = null; this.turnActive = false; }

@@ -40,11 +40,11 @@ function MiniBtn({ on, title, onClick, icon: Icon, danger }: { on: boolean; titl
 // the SAME window — which grows upward to fit. The surface fills the whole window
 // (so there's never a dark gap), no border, and macOS rounds the frameless window.
 export function MiniBar({ phase, muted, cameraOn, screenOn, cameraStream, screenStream,
-  toggleMute, toggleCamera, toggleScreen, getLevels, onEnd }: {
+  toggleMute, toggleCamera, toggleScreen, getLevels, getBands, onEnd }: {
   phase: LivePhase; muted: boolean; cameraOn: boolean; screenOn: boolean;
   cameraStream: MediaStream | null; screenStream: MediaStream | null;
   toggleMute: () => void; toggleCamera: () => void | Promise<void>; toggleScreen: () => void | Promise<void>;
-  getLevels: () => { mic: number; agent: number }; onEnd: () => void;
+  getLevels: () => { mic: number; agent: number }; getBands: () => { mic: number[]; agent: number[] }; onEnd: () => void;
 }) {
   const setMinimized = useUi((s) => s.setMinimized);
   const { userCaption, userPartial, agentCaption } = useLiveStore();
@@ -76,8 +76,8 @@ export function MiniBar({ phase, muted, cameraOn, screenOn, cameraStream, screen
       <div ref={contentRef} className="flex flex-col gap-2 p-2">
         {screenOn && screenStream && <Tile stream={screenStream} kind="screen" />}
         {cameraOn && cameraStream && <Tile stream={cameraStream} kind="camera" />}
-        <div className="flex items-center gap-2 px-0.5">
-          <Orb phase={phase} getLevels={getLevels} size={34} />
+        <div className="flex items-center gap-2.5 px-1">
+          <Orb phase={phase} getLevels={getLevels} getBands={getBands} size={30} />
           {confirmEnd ? (
             <>
               <span className="min-w-0 flex-1 truncate text-[12.5px]">End call?</span>

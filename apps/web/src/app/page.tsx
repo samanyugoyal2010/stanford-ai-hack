@@ -94,24 +94,23 @@ export default function Home() {
             <OpenLiveMark />
             <div className="space-y-2">
               <h1 className="text-[32px] font-semibold tracking-tight">OpenLive</h1>
-              <p className="max-w-md text-[14px] leading-relaxed text-muted-foreground">
-                Talk to it, show it your camera or screen, and it answers out loud in real time. The voice runs on your device, so nothing you say leaves the machine.
+              <p className="max-w-sm text-[14px] leading-relaxed text-muted-foreground">
+                Your on-device voice and vision assistant — talk to it, show it your screen, and it answers out loud.
               </p>
             </div>
             <div className="flex items-center gap-3">
               <button onClick={startNew}
                 className="flex items-center gap-2 rounded-full bg-accent px-7 py-3 text-[15px] font-medium text-accent-foreground shadow-lg transition duration-150 hover:scale-[1.03] hover:opacity-90 active:scale-95">
-                <Plus className="size-5" /> New call
+                <Plus className="size-5" /> New
               </button>
               <ResumeMenu onPick={resume} />
             </div>
           </div>
 
-          <footer className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-2 text-[11px] text-faint">
-            <a href="https://github.com/katipally/openlive" target="_blank" rel="noreferrer" className="transition hover:text-muted-foreground">
-              Open source
+          <footer className="absolute inset-x-0 bottom-4 flex items-center justify-center text-[11px] text-faint">
+            <a href="https://github.com/katipally/openlive/releases" target="_blank" rel="noreferrer" className="transition hover:text-muted-foreground">
+              {appVersion ? `v${appVersion}` : "dev"}
             </a>
-            {appVersion && <><span>·</span><span>v{appVersion}</span></>}
           </footer>
         </>
       )}
