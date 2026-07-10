@@ -14,4 +14,6 @@ contextBridge.exposeInMainWorld("openlive", {
   isDesktop: true,
   // App version, passed from main via additionalArguments (set from the release tag).
   version: (process.argv.find((a) => a.startsWith("--openlive-version=")) || "").split("=")[1] || "",
+  // The native menu (⌘,) asks the UI to open Settings.
+  onOpenSettings: (cb) => ipcRenderer.on("openlive:open-settings", () => cb()),
 });
