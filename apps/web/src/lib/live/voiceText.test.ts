@@ -31,6 +31,9 @@ assert.equal(stripMarkdown("Set it to **250** [p.18]."), "Set it to 250 .");
 assert.equal(stripMarkdown("In the image I see a dial"), "here I see a dial");
 assert.equal(stripMarkdown("The photo shows a knob"), "this shows a knob");
 assert.ok(!/image|photo|picture/i.test(stripMarkdown("Look at the picture and the image")));
+// Provider control-token noise (MiniMax leaks "[e[") is stripped from spoken text.
+assert.equal(stripMarkdown("Hey, what's up?[e["), "Hey, what's up?");
+assert.equal(stripMarkdown("Yeah, I'm here.[e[ [e["), "Yeah, I'm here.");
 
 // SentenceChunker: full sentences emit; tiny trailing fragments merge, never
 // emitted alone (the "different voice" fix).

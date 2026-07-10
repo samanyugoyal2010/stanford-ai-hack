@@ -55,7 +55,3 @@ export const liveClientMsgSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("tool_bridge_result"), reqId: z.string(), output: z.string() }),
 ]);
 export type LiveClientMsg = z.infer<typeof liveClientMsgSchema>;
-
-export function encodeLiveMsg(m: LiveServerMsg | LiveClientMsg): string {
-  return JSON.stringify(m);
-}

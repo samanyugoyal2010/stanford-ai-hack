@@ -48,6 +48,11 @@ export function stripMarkdown(s: string): string {
     .replace(/^\s*[-•]\s+/gm, "")               // list bullets
     .replace(/^\s*\d+\.\s+/gm, "")              // numbered lists
     .replace(/\[p\.\s*\d+\]/gi, "")             // citation tokens
+    // Strip provider control-token noise (e.g. MiniMax leaks "[e[" fragments into
+    // its text stream). Spoken text never has legitimate square brackets — the
+    // prompt forbids symbols — so any that remain after links/citations are junk.
+    .replace(/[[\]][a-z0-9~!]{0,3}[[\]]/gi, " ")
+    .replace(/[[\]]/g, "")
     .replace(/\bin (?:the|this|your) (?:image|photo|picture|frame)\b/gi, "here")
     .replace(/\b(?:the|this|that|your) (?:image|photo|picture|frame)\b/gi, "this")
     .replace(/\s+/g, " ")

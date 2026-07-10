@@ -12,13 +12,10 @@ export interface Turn {
 }
 
 /** Fold a provider's normalized event stream into one assistant turn, emitting
- *  SSE text/reasoning deltas as it goes. `onArgDelta` fires as a tool's argument
- *  JSON streams in (name + accumulated args) — the canvas worker uses it to
- *  decode and stream the HTML page live. */
+ *  text/reasoning deltas as it goes. */
 export async function collectTurn(
   gen: AsyncGenerator<ProviderEvent>,
   emit: Emit,
-  onArgDelta?: (name: string, argsSoFar: string) => void | Promise<void>,
 ): Promise<Turn> {
   let text = "";
   let reasoning = "";
@@ -51,7 +48,6 @@ export async function collectTurn(
         const c = calls.get(ev.index);
         if (!c) break;
         c.args += ev.argsDelta;
-        if (onArgDelta) await onArgDelta(c.name, c.args);
         break;
       }
       case "tool_stop":

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.svg" alt="OpenLive" width="88" height="88" />
+
 # OpenLive
 
 ### The open voice and vision layer for AI agents.
@@ -16,6 +18,10 @@ An open alternative to ElevenLabs conversational agents and Gemini Live.
 &nbsp;
 [![Download for Windows](https://img.shields.io/badge/Download-Windows-0b0b0c?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0zIDVsNy0xdjdIM3ptMCAxNGw3IDF2LTdIM3ptOC0xNXY4aDEwVjNsLTEwIDF6bTAgMTZsMTAgMVYxM0gxMXoiLz48L3N2Zz4=&logoColor=white)](https://github.com/katipally/openlive/releases/latest)
 
+</div>
+
+<div align="center">
+<img src="docs/hero.png" alt="OpenLive in a live call — the voice orb listening, with a live transcript" width="820" />
 </div>
 
 ---
@@ -36,18 +42,37 @@ reference build: download it, paste a key for the model you want, and talk.
 You bring the brain (Anthropic, OpenAI, or MiniMax today, more to come). OpenLive
 gives it ears, a mouth, and eyes.
 
-<div align="center">
-<img src="docs/hero.png" alt="OpenLive home screen" width="720" />
-</div>
+## Features
+
+- **On-device voice loop.** Voice activity detection (Silero), speech-to-text
+  (Whisper), end-of-turn detection (Smart-Turn), and text-to-speech (Kokoro) all
+  run in the app on WebGPU. Nothing you say leaves the machine.
+- **It can see.** Turn on your camera or share your screen and the model watches it
+  live, like a video call. The `look` tool grabs a crisp hi-res frame when it needs
+  to read a label or a line of code.
+- **Bring your own model.** Anthropic, OpenAI, and MiniMax today. Models are fetched
+  live from the provider with vision / reasoning / context / price surfaced in the
+  picker, and reasoning effort is a dial from Auto to Max.
+- **Agent tools.** Web search, fetch a URL, remember a fact across calls, and a live
+  checklist — plus, in the desktop app, read/write your clipboard and open a URL.
+- **Barge-in.** Interrupt any time and it stops mid-word, like a real conversation.
+- **Floating mini mode.** Shrink to an always-on-top pill that keeps listening while
+  you work; camera and screen previews stack right above it.
+- **Resume conversations.** Sessions are saved locally — pick one and carry on.
+- **Private by design.** Audio never uploads. API keys are encrypted at rest
+  (AES-256-GCM) and only the last four digits are ever shown.
+
+## Screenshots
+
+| Home | Settings — bring your own model | Pre-call setup |
+|---|---|---|
+| ![Home](docs/home.png) | ![Settings](docs/settings.png) | ![Pre-call](docs/lobby.png) |
 
 ## Why on-device voice matters
 
-The listening and speaking never leave your computer. Voice activity detection
-(Silero), speech-to-text (Whisper), end-of-turn detection (Smart-Turn), and
-text-to-speech (Kokoro) all run in the app through `transformers.js` on WebGPU.
-The only thing that goes out is the text turn to the model provider you picked, the
-same call you would make from any app. No audio uploads, no per-minute meter, no
-lock-in.
+The listening and speaking never leave your computer. The only thing that goes out
+is the text turn to the model provider you picked — the same call you would make
+from any app. No audio uploads, no per-minute meter, no lock-in.
 
 ## How it works
 
@@ -67,8 +92,8 @@ app can start speaking sentence by sentence. Interrupt any time and it stops mid
 **Just use it:** grab the installer from the
 [latest release](https://github.com/katipally/openlive/releases/latest), open the
 app, go to Settings, pick a provider, paste your API key, and start a call. Keys are
-encrypted on disk and the model runs the first time you talk (about 200 MB of voice
-models download once and cache).
+encrypted on disk and the voice models download the first time you talk (about
+200 MB, cached after that).
 
 **Build it from source:**
 
@@ -92,7 +117,8 @@ from real runs, not marketing.
 ```
 apps/desktop     Electron shell: spawns the local servers, media perms, window, auto-update
 apps/web         Next.js UI + the on-device voice engine (src/lib/live/*) + /api settings
-services/agent   Hono + ws: the /live WebSocket, tools (fetch_url, look, update_todos)
+services/agent   Hono + ws: the /live WebSocket and agent tools (web_search, fetch_url,
+                 remember, update_todos, look, clipboard, open_url)
 packages/harness provider-neutral model adapters, live model listing, cost/effort
 packages/shared  wire protocol + shared types
 packages/db      JSON-file store: encrypted keys, settings, conversations
@@ -136,3 +162,5 @@ downloads shown clearly. Mac signing runs when these repo secrets are set:
 ## License
 
 [MIT](LICENSE). Use it, change it, ship it.
+</content>
+</invoke>

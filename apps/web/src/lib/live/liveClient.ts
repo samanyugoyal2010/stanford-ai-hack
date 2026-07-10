@@ -18,7 +18,6 @@ export interface LiveHandlers {
 
 export class LiveClient {
   private ws: WebSocket | null = null;
-  private slug = "";
   private chatId = "";
   private closedByUser = false;
   private attempts = 0;
@@ -28,9 +27,8 @@ export class LiveClient {
   private static HEALTHY_MS = 3000; // a connection must survive this long to "count"
   constructor(private h: LiveHandlers) {}
 
-  connect(productSlug: string | null, chatId: string) {
-    // null slug = master mode → the server maps "master" to a no-product session.
-    this.slug = productSlug ?? "master"; this.chatId = chatId;
+  connect(chatId: string) {
+    this.chatId = chatId;
     this.closedByUser = false;
     this.open();
   }
@@ -38,7 +36,7 @@ export class LiveClient {
   private open() {
     const base = process.env.NEXT_PUBLIC_LIVE_WS_URL
       || `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
-    const ws = new WebSocket(`${base}/live?product=${encodeURIComponent(this.slug)}&chat=${encodeURIComponent(this.chatId)}`);
+    const ws = new WebSocket(`${base}/live?chat=${encodeURIComponent(this.chatId)}`);
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       this.h.onOpen?.();

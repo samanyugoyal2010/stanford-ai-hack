@@ -178,8 +178,10 @@ function createMainWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      // Hand the app version to the preload (app.* isn't reachable there).
-      additionalArguments: [`--openlive-version=${app.getVersion()}`],
+      // Hand the app version to the preload (app.* isn't reachable there). Released
+      // builds show the tag version (CI stamps it); unpackaged dev builds get a
+      // "-dev" suffix so it's obvious you're not on a release.
+      additionalArguments: [`--openlive-version=${app.isPackaged ? app.getVersion() : `${app.getVersion()}-dev`}`],
     },
   });
   for (const ev of ["resize", "move", "close"]) mainWin.on(ev, saveWindowState);
@@ -205,7 +207,7 @@ function createMainWindow() {
 // shows the previews INLINE (stacked above the pill) with no separate windows. The
 // pill grows UPWARD as previews appear (its bottom edge stays put). Opaque,
 // always-on-top; macOS rounds the frameless window natively.
-const PILL_W = 480, PILL_H = 60;
+const PILL_W = 430, PILL_H = 56;
 let savedBounds = null;
 
 function miniDisplay() {
@@ -216,13 +218,25 @@ function pillBottom(area) { return area.y + area.height - 72; } // clear the doc
 function wireMiniIpc() {
   ipcMain.on("openlive:mini", () => {
     if (!mainWin) return;
-    if (!savedBounds) savedBounds = mainWin.getBounds();
-    const area = miniDisplay().workArea;
-    mainWin.setResizable(false);
-    mainWin.setMinimumSize(PILL_W, PILL_H);
-    mainWin.setBounds({ width: PILL_W, height: PILL_H, x: area.x + Math.round((area.width - PILL_W) / 2), y: pillBottom(area) - PILL_H });
-    mainWin.setAlwaysOnTop(true, "floating");
-    mainWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    const applyPill = () => {
+      if (!mainWin) return;
+      if (!savedBounds) savedBounds = mainWin.getBounds();
+      const area = miniDisplay().workArea;
+      mainWin.setResizable(false);
+      mainWin.setMinimumSize(PILL_W, PILL_H);
+      mainWin.setBounds({ width: PILL_W, height: PILL_H, x: area.x + Math.round((area.width - PILL_W) / 2), y: pillBottom(area) - PILL_H });
+      mainWin.setAlwaysOnTop(true, "floating");
+      mainWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    };
+    // A fullscreen (or simple-fullscreen) window ignores setBounds — leave it first,
+    // then shrink to the pill once the OS transition completes.
+    if (mainWin.isFullScreen() || mainWin.isSimpleFullScreen()) {
+      mainWin.once("leave-full-screen", applyPill);
+      mainWin.setFullScreen(false);
+    } else {
+      if (mainWin.isMaximized()) mainWin.unmaximize();
+      applyPill();
+    }
   });
   ipcMain.on("openlive:unmini", () => {
     if (!mainWin) return;
@@ -284,6 +298,7 @@ function buildMenu() {
   const template = [
     ...(isMac ? [{ role: "appMenu", submenu: [
       { role: "about", label: "About OpenLive" },
+      { label: "Check for Updates…", click: checkForUpdatesNow },
       { type: "separator" },
       { label: "Settings…", accelerator: "CmdOrCtrl+,", click: openSettings },
       { label: "Open at Login", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin,
@@ -297,7 +312,8 @@ function buildMenu() {
     { role: "windowMenu" },
     { role: "help", submenu: [
       { label: "OpenLive on GitHub", click: () => shell.openExternal("https://github.com/katipally/openlive") },
-      ...(isMac ? [] : [{ label: "Settings", accelerator: "CmdOrCtrl+,", click: openSettings },
+      ...(isMac ? [] : [{ label: "Check for Updates…", click: checkForUpdatesNow },
+                        { label: "Settings", accelerator: "CmdOrCtrl+,", click: openSettings },
                         { type: "separator" }, { role: "about", label: "About OpenLive" }]),
     ] },
   ];
@@ -306,11 +322,26 @@ function buildMenu() {
 }
 
 // ── auto-update (packaged prod only; needs the published latest*.yml) ─────────
+// Flow: on launch + every 6h the app checks the GitHub release feed (owner/repo in
+// electron-builder.yml). A newer version auto-downloads, then prompts to restart;
+// "Later" still installs on the next quit. NOTE: macOS auto-update requires the
+// app to be SIGNED — set the Apple secrets in the release workflow, or updates
+// silently no-op on Mac even though the release is published fine.
+let updater = null;         // the electron-updater singleton, once initialised
+let manualCheck = false;    // a menu-driven check reports "up to date" out loud
+
 function initAutoUpdate() {
   if (DEV || !app.isPackaged) return;
-  let updater;
   try { ({ autoUpdater: updater } = require("electron-updater")); } catch { return; }
   updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true; // if they pick "Later", install on next quit
+  updater.on("checking-for-update", () => console.log("[updater] checking…"));
+  updater.on("update-available", (i) => console.log("[updater] update available:", i?.version));
+  updater.on("update-not-available", () => {
+    console.log("[updater] up to date");
+    if (manualCheck) { manualCheck = false; if (mainWin) dialog.showMessageBox(mainWin, { type: "info", message: "You're up to date", detail: `OpenLive ${app.getVersion()} is the latest version.` }); }
+  });
+  updater.on("download-progress", (p) => console.log(`[updater] downloading ${Math.round(p?.percent || 0)}%`));
   updater.on("update-downloaded", async ({ version }) => {
     const { response } = await dialog.showMessageBox(mainWin, {
       type: "info", buttons: ["Restart now", "Later"], defaultId: 0, cancelId: 1,
@@ -318,9 +349,19 @@ function initAutoUpdate() {
     });
     if (response === 0) { app.isQuitting = true; updater.quitAndInstall(); }
   });
-  updater.on("error", (e) => console.error("[updater]", e?.message || e));
+  updater.on("error", (e) => {
+    console.error("[updater]", e?.message || e);
+    if (manualCheck) { manualCheck = false; if (mainWin) dialog.showMessageBox(mainWin, { type: "warning", message: "Couldn't check for updates", detail: String(e?.message || e) }); }
+  });
   updater.checkForUpdates().catch(() => {});
   setInterval(() => updater.checkForUpdates().catch(() => {}), 6 * 60 * 60 * 1000); // every 6h
+}
+
+// Menu-driven "Check for Updates…" — reports the result (up to date / downloading).
+function checkForUpdatesNow() {
+  if (!updater) { if (mainWin) dialog.showMessageBox(mainWin, { type: "info", message: "Updates aren't available in this build", detail: "Auto-update runs only in the installed (packaged) app." }); return; }
+  manualCheck = true;
+  updater.checkForUpdates().catch((e) => console.error("[updater] manual check:", e?.message || e));
 }
 
 async function boot() {

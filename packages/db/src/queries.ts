@@ -137,10 +137,3 @@ export function listMessages(chatId: string): ChatMessage[] {
     .filter((m) => m.chatId === chatId)
     .map((m) => ({ id: m.id, chatId: m.chatId, role: m.role, content: m.content, live: !!m.live, createdAt: m.createdAt }));
 }
-
-/** Overwrite a message's blocks. */
-export function updateMessage(id: string, content: MessageBlock[]): void {
-  const c = readConvos();
-  const m = c.messages.find((x) => x.id === id);
-  if (m) { m.content = content; writeJson(CONVOS, c); }
-}

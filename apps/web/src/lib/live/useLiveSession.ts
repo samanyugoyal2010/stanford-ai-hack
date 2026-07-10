@@ -6,8 +6,10 @@ import { LiveClient } from "./liveClient";
 import { CameraCapture } from "./cameraCapture";
 import { AudioPlayer } from "./audioPlayback";
 import { VoiceEngine, type EnginePhase } from "./voiceEngine";
-import { loadModels, disposeModels, modelsReady, modelsCached } from "./models";
+import { loadModels, modelsReady, modelsCached } from "./models";
 import { useLiveStore } from "./liveStore";
+
+const NO_BANDS = [0, 0, 0, 0, 0];
 
 function abToBase64(ab: ArrayBuffer): string {
   const bytes = new Uint8Array(ab);
@@ -20,7 +22,7 @@ function abToBase64(ab: ArrayBuffer): string {
 // on-device; this hook wires it to the /live socket (final text + camera frames
 // + cancel), the camera, and the chat store, and owns a single leak-proof
 // teardown that every close path routes through.
-export function useLiveSession(chatId: string, productSlug: string | null) {
+export function useLiveSession(chatId: string) {
   const set = useLiveStore((s) => s.set);
   const client = useRef<LiveClient | null>(null);
   const engine = useRef<VoiceEngine | null>(null);
@@ -32,13 +34,16 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
   const tornDown = useRef(false);
   const onPageHide = useRef<() => void>(() => {});
   // Word-by-word transcript reveal, synced to the VOICE (not the generated stream):
-  // `spokenPrev` = chunks fully voiced, `curChunk` = the one revealing now, `revealRaf`
-  // = its animation frame. So the chat text always equals what's actually been said.
-  const spokenPrev = useRef("");
+  // `segText` = chunks of the CURRENT segment already voiced, `curChunk` = the one
+  // revealing now, `revealRaf` = its frame. `pendingTools` holds tool activity until
+  // the next chunk voices, so it lands BETWEEN what was said before it and the answer
+  // after — the transcript reads in spoken order (say "let me check" → tool → answer).
+  const segText = useRef("");
   const curChunk = useRef<string | null>(null);
   const revealRaf = useRef<number | null>(null);
+  const pendingTools = useRef<{ id: string; tool: string; summary?: string; detail?: string }[]>([]);
   const stopReveal = () => { if (revealRaf.current != null) { cancelAnimationFrame(revealRaf.current); revealRaf.current = null; } };
-  const resetTranscript = () => { stopReveal(); spokenPrev.current = ""; curChunk.current = null; };
+  const resetTranscript = () => { stopReveal(); segText.current = ""; curChunk.current = null; pendingTools.current = []; };
 
   // ── single teardown authority — releases EVERYTHING, always ───────────────
   const teardown = useCallback(() => {
@@ -54,15 +59,16 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
     try { screenRef.current?.stop(); } catch { /* */ }             // stop screen share
     if (micStream.current) { micStream.current.getTracks().forEach((t) => t.stop()); micStream.current = null; }
     if (assistantId.current) { chatStore.liveFinish(chatId, assistantId.current); assistantId.current = null; }
-    disposeModels();                                             // frees the WebGPU worker
+    // The on-device voice worker is left running on purpose — kept warm for the
+    // tab's lifetime so reopening Live is instant (no re-download / shader recompile).
     client.current = null; engine.current = null; camRef.current = null; screenRef.current = null;
     // Keep `error` so the user sees why it ended; start() clears it next time.
-    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, pttEnabled: false, cameraStream: null, screenStream: null, turns: [], userCaption: "", userPartial: false, agentCaption: "" });
+    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, cameraStream: null, screenStream: null, userCaption: "", userPartial: false, agentCaption: "" });
   }, [chatId, set]);
 
   const start = useCallback(async () => {
     tornDown.current = false;
-    set({ error: undefined, phase: "connecting", active: true, downloadPct: 0, turns: [], userCaption: "", userPartial: false, agentCaption: "" });
+    set({ error: undefined, phase: "connecting", active: true, downloadPct: 0, userCaption: "", userPartial: false, agentCaption: "" });
     // Unlock audio NOW, synchronously inside the click gesture. iOS Safari blocks
     // AudioContext playback that starts after an await, so priming here (before the
     // model download) is what lets the agent's voice actually play on iPhone.
@@ -95,14 +101,27 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
         // audio so the panel shows exactly what's been said (honest on barge-in).
         onAgentText: (sentence, durationMs) => {
           set({ agentCaption: sentence, agentCaptionMs: durationMs });
-          // The previous chunk's audio has finished (this one is now playing) — commit it.
-          if (curChunk.current) spokenPrev.current = spokenPrev.current ? `${spokenPrev.current} ${curChunk.current}` : curChunk.current;
+          const id = assistantId.current;
+          // The previous chunk's audio has finished (this one is now playing) — commit
+          // it into the current segment.
+          if (curChunk.current) segText.current = segText.current ? `${segText.current} ${curChunk.current}` : curChunk.current;
+          // A tool ran AND we've already voiced part of this segment → drop the tool
+          // activity in HERE (after what was just said, before the answer that follows)
+          // and start a fresh segment. Gating on segText keeps it AFTER the "let me
+          // check" line regardless of when the tool event arrived on the wire.
+          if (pendingTools.current.length && segText.current && id) {
+            for (const t of pendingTools.current) {
+              chatStore.liveEvent(chatId, id, { type: "tool_start", id: t.id, tool: t.tool, summary: t.summary });
+              chatStore.liveEvent(chatId, id, { type: "tool_done", id: t.id, detail: t.detail });
+            }
+            pendingTools.current = [];
+            segText.current = "";
+          }
           curChunk.current = sentence;
           stopReveal();
-          const id = assistantId.current;
           if (!id) return;
           const words = sentence.split(/\s+/).filter(Boolean);
-          const prev = spokenPrev.current;
+          const base = segText.current;
           const dur = durationMs > 0 ? durationMs : words.length * 320;
           const startedAt = performance.now();
           const step = () => {
@@ -110,9 +129,9 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
             const frac = Math.min(1, (performance.now() - startedAt) / dur);
             const idx = Math.max(1, Math.min(words.length, Math.ceil(frac * words.length)));
             const revealed = words.slice(0, idx).join(" ");
-            chatStore.liveSetText(chatId, id, prev ? `${prev} ${revealed}` : revealed);
-            if (frac < 1) { revealRaf.current = requestAnimationFrame(step); }
-            else { revealRaf.current = null; spokenPrev.current = prev ? `${prev} ${sentence}` : sentence; curChunk.current = null; }
+            chatStore.liveText(chatId, id, base ? `${base} ${revealed}` : revealed);
+            if (frac < 1) revealRaf.current = requestAnimationFrame(step);
+            else revealRaf.current = null;
           };
           step();
         },
@@ -125,8 +144,11 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
           // Stop the in-flight word reveal and snap the transcript to `spoken`
           // (the engine's authoritative, sentence-granular cutoff).
           stopReveal();
-          spokenPrev.current = spoken; curChunk.current = null;
-          if (assistantId.current && spoken) chatStore.liveSetText(chatId, assistantId.current, spoken);
+          pendingTools.current = [];
+          // Keep what's already revealed (voice-synced ≈ what was spoken); just stop
+          // advancing. Commit the current chunk so the next turn starts clean.
+          if (curChunk.current) segText.current = segText.current ? `${segText.current} ${curChunk.current}` : curChunk.current;
+          curChunk.current = null;
           set({ agentCaption: "", userCaption: "", userPartial: false });
         },
       }, player.current ?? undefined);
@@ -148,18 +170,24 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
           // as each chunk is spoken (onAgentText), NOT from the generated stream (which
           // races ahead) — so an interrupt leaves the panel showing only what was said.
           if (e.type === "text_delta") { engine.current?.feedAgentDelta(e.text); return; }
+          // Reasoning streams into the transcript's work block (interleaved with tools).
+          if (e.type === "reasoning_delta") { if (assistantId.current) chatStore.liveReason(chatId, assistantId.current, e.text); return; }
           if (e.type === "done") {
             engine.current?.endAgentTurn();
-            // Finish the spoken turn but KEEP assistantId pointing at it: a
-            // background canvas worker (build_canvas) emits its canvas_end
-            // seconds AFTER this `done`, and it must still land on the canvas.
-            // assistantId rolls forward on the next user
-            // turn (handleUserText) and is finalized on teardown. (Previously it
-            // was nulled here, so live-built visuals were silently dropped.)
+            // Finish the spoken turn but KEEP assistantId pointing at it, so any
+            // trailing event still attaches. It rolls forward on the next user turn
+            // (handleUserText) and is finalized on teardown.
             if (assistantId.current) chatStore.liveFinish(chatId, assistantId.current);
             return;
           }
-          if (assistantId.current) chatStore.liveApply(chatId, assistantId.current, e);
+          // Buffer tool activity; it's placed into the transcript when the next chunk
+          // voices (onAgentText) so it sits in spoken order, not ahead of the voice.
+          if (e.type === "tool_start") { pendingTools.current.push({ id: e.id, tool: e.tool, summary: e.summary }); return; }
+          if (e.type === "tool_done") {
+            const t = pendingTools.current.find((x) => x.id === e.id);
+            if (t) t.detail = e.detail;                                              // still buffered → flush marks it done
+            else if (assistantId.current) chatStore.liveEvent(chatId, assistantId.current, e); // already shown → update
+          }
         },
         onNeedFrame: async (reqId) => {
           const st = useLiveStore.getState();
@@ -179,7 +207,7 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
         },
       });
       client.current = c;
-      c.connect(productSlug, chatId);
+      c.connect(chatId);
 
       onPageHide.current = () => teardown();
       window.addEventListener("pagehide", onPageHide.current);
@@ -190,7 +218,7 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
       teardown();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId, productSlug, set, teardown]);
+  }, [chatId, set, teardown]);
 
   // A completed user turn: attach the freshest camera frame, send the text, and
   // reflect the exchange in the chat store (so it renders + persists like typing).
@@ -202,15 +230,11 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
     if (st0.cameraOn && camRef.current) { const j = await camRef.current.captureFreshest(); if (j) frames.push({ data: abToBase64(j), mime: "image/jpeg", source: "camera" }); }
     if (st0.screenOn && screenRef.current) { const j = await screenRef.current.captureFreshest(); if (j) frames.push({ data: abToBase64(j), mime: "image/jpeg", source: "screen" }); }
     client.current?.userText(text, frames);
-    const st = useLiveStore.getState();
-    const turns = [...st.turns];
-    if (st.agentCaption.trim()) turns.push({ role: "agent", text: st.agentCaption.trim() });
-    turns.push({ role: "user", text });
-    set({ turns: turns.slice(-40), userCaption: "", userPartial: false, agentCaption: "" });
+    set({ userCaption: "", userPartial: false, agentCaption: "" });
     if (assistantId.current) chatStore.liveFinish(chatId, assistantId.current);
     resetTranscript(); // new turn → the word reveal starts fresh (don't carry prior spoken text)
-    assistantId.current = chatStore.liveUserTurn(chatId, productSlug, text);
-  }, [chatId, productSlug, set]);
+    assistantId.current = chatStore.liveUserTurn(chatId, text);
+  }, [chatId, set]);
 
   // Explicit, user-initiated model download (pre-call). Nothing downloads until
   // the user asks — and because the worker stays warm, this only happens once.
@@ -248,17 +272,6 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
     const next = !useLiveStore.getState().muted;
     engine.current?.setMuted(next);
     set({ muted: next });
-  }, [set]);
-
-  // Push-to-talk: setPtt(true) mutes until held; holdTalk toggles while held.
-  const setPtt = useCallback((enabled: boolean) => {
-    engine.current?.setMuted(enabled);
-    set({ pttEnabled: enabled, muted: enabled });
-  }, [set]);
-  const holdTalk = useCallback((down: boolean) => {
-    if (!useLiveStore.getState().pttEnabled) return;
-    engine.current?.setMuted(!down);
-    set({ muted: !down });
   }, [set]);
 
   // Change the mic — live if a call is active (rebuild the stream + VAD), else it
@@ -342,7 +355,9 @@ export function useLiveSession(chatId: string, productSlug: string | null) {
   }, [set]);
 
   const getLevels = useCallback(() => ({ mic: engine.current?.micLevel() ?? 0, agent: engine.current?.agentLevel() ?? 0 }), []);
-  const getSpeechProgress = useCallback(() => engine.current?.speechProgress() ?? 1, []);
+  // Per-frequency-band energy (0..1) of the live voice — drives the orb's real
+  // reactive spectrum while you or the agent talk.
+  const getBands = useCallback(() => ({ mic: engine.current?.micBands() ?? NO_BANDS, agent: engine.current?.agentBands() ?? NO_BANDS }), []);
 
-  return { start, stop, download, toggleMute, setPtt, holdTalk, toggleCamera, toggleScreen, getLevels, getSpeechProgress, refreshDevices, setMic, setCam };
+  return { start, stop, download, toggleMute, toggleCamera, toggleScreen, getLevels, getBands, refreshDevices, setMic, setCam };
 }

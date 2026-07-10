@@ -4,7 +4,6 @@ import type { ModelProgress } from "./models";
 export type LivePhase = "off" | "connecting" | "loading" | "reconnecting" | "idle" | "listening" | "thinking" | "speaking";
 
 export interface DeviceOpt { id: string; label: string }
-export interface LiveTurn { role: "user" | "agent"; text: string }
 
 interface LiveState {
   active: boolean;
@@ -16,12 +15,10 @@ interface LiveState {
   downloadTotal: number;  // bytes total known so far
   downloadModels: ModelProgress[]; // per-model breakdown for the download UI
   muted: boolean;
-  pttEnabled: boolean; // push-to-talk: mic only listens while held
   cameraOn: boolean;
   screenOn: boolean;
   screenStream: MediaStream | null;
   cameraStream: MediaStream | null;
-  turns: LiveTurn[]; // running transcript (committed exchanges)
   userCaption: string;
   userPartial: boolean; // true while the user caption is still interim (greyed)
   agentCaption: string;
@@ -46,12 +43,10 @@ export const useLiveStore = create<LiveState>((set) => ({
   downloadTotal: 0,
   downloadModels: [],
   muted: false,
-  pttEnabled: false,
   cameraOn: false,
   screenOn: false,
   screenStream: null,
   cameraStream: null,
-  turns: [],
   userCaption: "",
   userPartial: false,
   agentCaption: "",

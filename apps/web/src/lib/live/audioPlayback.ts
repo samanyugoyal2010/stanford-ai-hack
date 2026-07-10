@@ -7,14 +7,16 @@
 // voice would leak into the mic uncancelled and break barge-in. Instead we route
 // through a MediaStreamDestination into a hidden <audio> element — which AEC3
 // DOES reference — so the agent's own voice is cancelled from the mic input.
+import { octaveBands } from "./spectrum";
+
 export class AudioPlayer {
   private ctx: AudioContext | null = null;
   private sink: MediaStreamAudioDestinationNode | null = null;
   private el: HTMLAudioElement | null = null;
   private analyser: AnalyserNode | null = null;   // taps the output for LIVE amplitude
   private tap: Float32Array | null = null;         // reusable time-domain buffer
+  private freq: Uint8Array | null = null;          // reusable frequency buffer (spectrum)
   private nextAt = 0;
-  private runStart = 0; // start time of the current continuous speaking run
   private minEpoch = 0;
   private sources = new Set<AudioBufferSourceNode>();
   private timers = new Set<ReturnType<typeof setTimeout>>(); // pending onStart callbacks
@@ -28,7 +30,9 @@ export class AudioPlayer {
       // voice amplitude (drives a lively orb) instead of a static per-chunk RMS.
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 256;
+      this.analyser.smoothingTimeConstant = 0.6; // steadier spectrum bars
       this.tap = new Float32Array(this.analyser.fftSize);
+      this.freq = new Uint8Array(this.analyser.frequencyBinCount);
       const el = document.createElement("audio");
       el.autoplay = true;
       el.setAttribute("playsinline", "");
@@ -58,7 +62,6 @@ export class AudioPlayer {
     src.connect(this.sink!); // → MediaStreamDestination → <audio> (AEC-visible)
     if (this.analyser) src.connect(this.analyser); // parallel tap (no audio output)
     const startAt = Math.max(ctx.currentTime + 0.02, this.nextAt);
-    if (this.nextAt <= ctx.currentTime) this.runStart = startAt; // fresh run after a gap
     src.start(startAt);
     this.nextAt = startAt + buf.duration;
     this.sources.add(src);
@@ -76,7 +79,6 @@ export class AudioPlayer {
     for (const t of this.timers) clearTimeout(t); // drop pending caption updates
     this.timers.clear();
     this.nextAt = 0;
-    this.runStart = 0;
     this.rms = 0;
   }
 
@@ -91,12 +93,12 @@ export class AudioPlayer {
     }
     return this.sources.size > 0 ? this.rms : 0;
   }
-  /** 0..1 fraction of the current speaking run's audio that has played — drives
-   *  word-by-word caption reveal so the text tracks the actual voice. */
-  progress() {
-    const ctx = this.ctx;
-    if (!ctx || this.nextAt <= this.runStart) return 1;
-    return Math.max(0, Math.min(1, (ctx.currentTime - this.runStart) / (this.nextAt - this.runStart)));
+  /** N octave-band magnitudes (0..1) of the agent's voice — a real spectrum for the
+   *  orb while it speaks. Zeros when nothing is playing. */
+  agentBands(n = 5): number[] {
+    if (!this.analyser || !this.freq || this.sources.size === 0) return new Array(n).fill(0);
+    this.analyser.getByteFrequencyData(this.freq as Uint8Array<ArrayBuffer>);
+    return octaveBands(this.freq, n);
   }
   resume() { this.ensure(); }
   close() {
