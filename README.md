@@ -7,7 +7,7 @@
 ### The open voice and vision layer for AI agents.
 
 Bring your own model. Get real-time speech and sight, running on your own machine.
-An open alternative to ElevenLabs conversational agents and Gemini Live.
+An open alternative to ElevenLabs, Gemini Live, and OpenAI Realtime.
 
 [![Release](https://img.shields.io/github/v/release/katipally/openlive?color=2f6fed)](https://github.com/katipally/openlive/releases/latest)
 [![CI](https://github.com/katipally/openlive/actions/workflows/ci.yml/badge.svg)](https://github.com/katipally/openlive/actions/workflows/ci.yml)
@@ -52,7 +52,9 @@ gives it ears, a mouth, and eyes.
   to read a label or a line of code.
 - **Bring your own model.** Anthropic, OpenAI, and MiniMax today. Models are fetched
   live from the provider with vision / reasoning / context / price surfaced in the
-  picker, and reasoning effort is a dial from Auto to Max.
+  picker, and reasoning effort is a dial from Auto to Max. It's a layer, not a walled
+  app — fork it to wire up other providers, your own agent backend, a self-hosted
+  endpoint, or a local model.
 - **Agent tools.** Web search, fetch a URL, remember a fact across calls, and a live
   checklist — plus, in the desktop app, read/write your clipboard and open a URL.
 - **Barge-in.** Interrupt any time and it stops mid-word, like a real conversation.
@@ -64,15 +66,21 @@ gives it ears, a mouth, and eyes.
 
 ## Screenshots
 
-| Home | Settings — bring your own model | Pre-call setup |
-|---|---|---|
-| ![Home](assets/home.png) | ![Settings](assets/settings.png) | ![Pre-call](assets/lobby.png) |
+| Home | In a live call |
+|---|---|
+| ![Home](assets/home.png) | ![In a live call](assets/hero.png) |
+| **Pre-call setup** | **Settings — bring your own model** |
+| ![Pre-call setup](assets/lobby.png) | ![Settings](assets/settings.png) |
 
 ## Why on-device voice matters
 
 The listening and speaking never leave your computer. The only thing that goes out
 is the text turn to the model provider you picked — the same call you would make
 from any app. No audio uploads, no per-minute meter, no lock-in.
+
+That also skips the separate speech-to-text, text-to-speech, and real-time-audio
+fees hosted platforms charge on top. You still pay your normal model and vision API
+costs — nothing more.
 
 ## How it works
 
