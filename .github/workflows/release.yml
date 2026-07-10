@@ -89,9 +89,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # Give users a clean release: a short body with the two downloads, and strip
-      # electron-builder's auto-update metadata (*.blockmap, *.yml) from the asset
-      # list so the page shows only the Mac + Windows installers.
+      # Give users a clean release: a short body pointing at the two installers,
+      # and strip the *.blockmap noise. The *.yml + mac *.zip stay — auto-update
+      # (electron-updater) needs them; users just follow the download table.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -109,6 +109,6 @@ jobs:
           On first launch macOS may take a few seconds to verify the app — that's normal.
           "
           gh release edit "$TAG" --repo "$REPO" --draft=false --latest --notes "$NOTES"
-          for a in $(gh release view "$TAG" --repo "$REPO" --json assets -q '.assets[].name' | grep -E '\.(blockmap|yml)$'); do
+          for a in $(gh release view "$TAG" --repo "$REPO" --json assets -q '.assets[].name' | grep -E '\.blockmap$'); do
             gh release delete-asset "$TAG" "$a" --yes --repo "$REPO" || true
           done

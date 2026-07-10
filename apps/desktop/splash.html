@@ -47,7 +47,12 @@
     <div style="text-align:center; display:flex; flex-direction:column; gap:6px;">
       <h1>OpenLive</h1>
       <p>Starting up<span class="dots"></span></p>
+      <p id="ver" style="font-size:11px; color:#71717a;"></p>
     </div>
   </div>
+  <script>
+    const v = new URLSearchParams(location.search).get("v");
+    if (v) document.getElementById("ver").textContent = "v" + v;
+  </script>
 </body>
 </html>

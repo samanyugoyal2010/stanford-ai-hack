@@ -31,9 +31,12 @@ extraResources:
 mac:
   category: public.app-category.productivity
   # One universal DMG (Apple Silicon + Intel in a single file) so users don't have
-  # to know their chip — just "download for Mac".
+  # to know their chip — just "download for Mac". The zip is what auto-update pulls
+  # (electron-updater can't update from a .dmg); users never touch it.
   target:
     - target: dmg
+      arch: [universal]
+    - target: zip
       arch: [universal]
   artifactName: ${productName}-${version}-mac.${ext}
   hardenedRuntime: true
