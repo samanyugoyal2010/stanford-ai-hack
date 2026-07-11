@@ -3,22 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Lunar</title>
+  <title>Nudge | AI learning assistant</title>
   <link rel="stylesheet" href="styles.css">
-  <script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js"}}</script>
 </head>
 <body>
-  <main class="shell">
-    <section class="chat-panel">
-      <header><div class="brand">LUNAR <span>LOCAL INTELLIGENCE</span></div><div class="status"><i id="status-dot"></i><span id="status-label">Checking Ollama</span></div></header>
-      <div id="messages" class="messages"></div>
-      <form id="composer"><button type="button" id="mic" class="icon-button" title="Push to talk">◉</button><textarea id="prompt" rows="1" placeholder="Talk to Lunar..."></textarea><button class="send" type="submit">↑</button></form>
-    </section>
-    <section class="workspace">
-      <header><div class="eyebrow">SCENE WORKSPACE</div><button id="upload" class="outline">＋ Upload diagram</button></header>
-      <div id="viewport"></div>
-      <footer><div id="diagram"><span class="diagram-icon">◇</span><span id="diagram-label">Upload a diagram to build a 3D draft</span></div><button id="generate" class="primary" disabled>✦ Generate 3D draft</button></footer>
-    </section>
+  <main id="deck" class="deck" aria-label="Nudge keynote presentation">
+    <div id="track" class="track"></div>
+    <aside class="hud" aria-hidden="true">
+      <div class="hud-brand">
+        <span class="brand-mark">N</span>
+        <span class="brand-name">Nudge</span>
+      </div>
+      <div id="progress" class="progress">01 / 12</div>
+      <div id="dots" class="dots"></div>
+    </aside>
   </main>
   <script type="module" src="renderer.js"></script>
 </body>

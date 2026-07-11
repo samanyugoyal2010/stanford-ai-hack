@@ -1,82 +1,407 @@
-import * as THREE from '../node_modules/three/build/three.module.js';
-import { GLTFLoader } from '../node_modules/three/examples/jsm/loaders/GLTFLoader.js';
-import { STLLoader } from '../node_modules/three/examples/jsm/loaders/STLLoader.js';
+const deck = document.getElementById('deck');
+const track = document.getElementById('track');
+const progress = document.getElementById('progress');
+const dots = document.getElementById('dots');
 
-const $ = (id) => document.getElementById(id); const messages = $('messages'); let imageBase64 = null; let recognition = null; const referenceImage = document.createElement('img'); referenceImage.alt = 'Uploaded diagram reference'; referenceImage.id = 'reference-image'; $('viewport').prepend(referenceImage);
-let heartAnnotationAnchors = [];
-const accurateButton = document.createElement('button'); accurateButton.className = 'outline'; accurateButton.textContent = '⌁ Find accurate model'; $('upload').before(accurateButton); const localModelButton = document.createElement('button'); localModelButton.className = 'outline'; localModelButton.textContent = '＋ Open 3D model'; $('upload').before(localModelButton);
-const qualitySelect = document.createElement('select'); qualitySelect.className = 'quality-select'; qualitySelect.innerHTML = '<option value="preview">Preview</option><option value="standard">Standard</option><option value="professional">Professional</option><option value="hero">Hero asset</option>'; $('upload').before(qualitySelect);
-const referenceButton = document.createElement('button'); referenceButton.className = 'outline'; referenceButton.textContent = '＋ References'; $('upload').before(referenceButton); let referencePaths = [];
-referenceButton.addEventListener('click', async () => { referencePaths = await window.lunar.chooseReferences(); referenceButton.textContent = referencePaths.length ? `＋ ${referencePaths.length} references` : '＋ References'; });
-window.lunar.blenderStatus().then((status) => { if (!status.available && qualitySelect.value !== 'preview') qualitySelect.title = 'Blender is required for this quality mode'; });
-function addMessage(role, text) { const el = document.createElement('div'); el.className = `message ${role}`; el.innerHTML = `<div class="avatar">${role === 'user' ? '●' : '✦'}</div><p>${text.replaceAll('<', '&lt;')}</p>`; messages.append(el); messages.scrollTop = messages.scrollHeight; }
-addMessage('assistant', 'I’m Lunar. Ask me anything, or upload a diagram and I’ll turn its structure into a rough 3D scene.');
+const scenes = [
+  {
+    className: 'hero',
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="hero-grid">
+            <div>
+              <div class="eyebrow reveal">Nudge keynote 2026</div>
+              <h1 class="reveal delay-1">Help students get unstuck, without taking over the work.</h1>
+              <div class="hero-copy reveal delay-2">
+                <p>Nudge is an AI learning assistant that notices struggle in real time and gives students the next useful step, not the finished answer. It stays calm, precise, and context-aware so learning keeps moving.</p>
+              </div>
+              <div class="hero-actions reveal delay-3">
+                <a class="button primary" href="#scene-1">See the product</a>
+                <a class="button secondary" href="#scene-2">How it works</a>
+              </div>
+            </div>
+            <div class="hero-panel reveal delay-1">
+              <div class="hero-panel-top">
+                <div class="live-pill">Live guidance, not auto-solve</div>
+                <div class="monospace">Scene 01</div>
+              </div>
+              <div class="visual-stage">
+                <div class="orb white"></div>
+                <div class="orb blue"></div>
+                <div class="beam"></div>
+                <div class="callout" style="left: 10%; top: 18%;">
+                  <strong>Student stuck</strong>
+                  <p>“I know the concept, but this problem keeps breaking my workflow.”</p>
+                </div>
+                <div class="callout" style="right: 9%; bottom: 18%; max-width: 240px;">
+                  <strong>Nudge response</strong>
+                  <p>Spot the bottleneck, ask one focused question, then offer a hint that keeps ownership with the student.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="deck-split">
+            <div class="scene-copy">
+              <div class="eyebrow reveal">Why it matters</div>
+              <h2 class="reveal delay-1">The hardest moment in learning is not a lack of answers. It is the moment before the student gives up.</h2>
+              <p class="reveal delay-2">Nudge watches for hesitation, repeated errors, and unproductive loops. When it sees a student stall, it intervenes with a small, well-timed prompt that reduces frustration and preserves confidence.</p>
+            </div>
+            <div class="stat-stack">
+              <div class="stat-card reveal">
+                <div class="stat-number">01</div>
+                <strong>Signal of struggle</strong>
+                <p>Repeated incorrect attempts, long pauses, or a sudden drop in momentum.</p>
+              </div>
+              <div class="stat-card reveal delay-1">
+                <div class="stat-number">02</div>
+                <strong>Contextual response</strong>
+                <p>A hint, question, or example that matches the student’s current step.</p>
+              </div>
+              <div class="stat-card reveal delay-2">
+                <div class="stat-number">03</div>
+                <strong>Ownership preserved</strong>
+                <p>The assistant never finishes the task for the learner unless that is explicitly requested.</p>
+              </div>
+              <div class="stat-card reveal delay-3">
+                <div class="stat-number">04</div>
+                <strong>Progress continues</strong>
+                <p>Students stay in flow instead of stalling out or waiting for help.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="eyebrow reveal">Core experience</div>
+          <h2 class="reveal delay-1">The interface feels like a calm guide sitting beside the student.</h2>
+          <div class="feature-grid" style="margin-top: 26px;">
+            <article class="feature-card reveal">
+              <strong>Detects friction</strong>
+              <p>Built to notice when the student is circling the same mistake, pausing too long, or reaching for help too early.</p>
+              <div class="signal"><span style="width: 86%"></span></div>
+            </article>
+            <article class="feature-card reveal delay-1">
+              <strong>Guides step by step</strong>
+              <p>Instead of dumping a solution, Nudge narrows attention to the next logical move.</p>
+              <div class="signal"><span style="width: 68%"></span></div>
+            </article>
+            <article class="feature-card reveal delay-2">
+              <strong>Adapts to confidence</strong>
+              <p>When the student is close, it becomes lighter. When they are lost, it becomes more explicit.</p>
+              <div class="signal"><span style="width: 74%"></span></div>
+            </article>
+            <article class="feature-card reveal delay-3">
+              <strong>Stays out of the way</strong>
+              <p>Every interaction is meant to feel short, useful, and easy to dismiss once the student is moving again.</p>
+              <div class="signal"><span style="width: 58%"></span></div>
+            </article>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="deck-split">
+            <div class="quote-card reveal">
+              <div class="eyebrow">Design principle</div>
+              <div class="quote">Use a smaller question to unlock a larger insight.</div>
+              <p>That is the product philosophy behind Nudge. The assistant is not trying to impress with volume. It is trying to say the right thing at the right time, then get out of the way.</p>
+            </div>
+            <div class="timeline-grid">
+              <div class="timeline-card timeline-step reveal">
+                <div class="monospace">Step 1</div>
+                <strong>Observe</strong>
+                <p>Read the learning context, detect the pattern of confusion, and estimate whether the student is stuck or simply thinking.</p>
+              </div>
+              <div class="timeline-card timeline-step reveal delay-1">
+                <div class="monospace">Step 2</div>
+                <strong>Nudge</strong>
+                <p>Offer a concise hint, a targeted question, or a small reminder that unlocks the next move without over-explaining.</p>
+              </div>
+              <div class="timeline-card timeline-step reveal delay-2">
+                <div class="monospace">Step 3</div>
+                <strong>Reinforce</strong>
+                <p>Confirm progress, keep the student oriented, and avoid taking away the opportunity to learn by doing.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="eyebrow reveal">Product system</div>
+          <h2 class="reveal delay-1">A clear stack that can live inside classrooms, homework, tutoring, and practice tools.</h2>
+          <div class="stack-grid" style="margin-top: 26px;">
+            <div class="stack-card reveal">
+              <strong>Signal layer</strong>
+              <p>Captures pauses, retries, patterns of uncertainty, and the difference between productive struggle and dead-end confusion.</p>
+            </div>
+            <div class="stack-card reveal delay-1">
+              <strong>Policy layer</strong>
+              <p>Chooses whether to wait, ask, hint, scaffold, or escalate based on the learner’s state and the task complexity.</p>
+            </div>
+            <div class="stack-card reveal delay-2">
+              <strong>Interaction layer</strong>
+              <p>Keeps the UI fast and legible, with short responses that feel more like a calm collaborator than an assistant window.</p>
+            </div>
+            <div class="stack-card reveal delay-3">
+              <strong>Outcome layer</strong>
+              <p>Measures whether the student kept going, corrected course, and reached understanding rather than just completion.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="deck-split">
+            <div class="scene-copy">
+              <div class="eyebrow reveal">Experience quality</div>
+              <h2 class="reveal delay-1">Bright enough to feel premium. Quiet enough to feel trustworthy.</h2>
+              <p class="reveal delay-2">The visual system uses light surfaces, crisp type, restrained motion, and carefully paced transitions. The result is less like a startup demo and more like a flagship product introduction.</p>
+            </div>
+            <div class="grid-card reveal">
+              <strong>What changed</strong>
+              <ul>
+                <li>Replaced continuous scrolling with single-scene navigation.</li>
+                <li>Removed the dark, blurry, hackathon-style treatment.</li>
+                <li>Introduced a bright keynote layout with disciplined spacing.</li>
+                <li>Added a subtle progress indicator and stable motion timing.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="eyebrow reveal">For students</div>
+          <h2 class="reveal delay-1">Feels like support, not surveillance.</h2>
+          <div class="feature-grid" style="margin-top: 26px;">
+            <article class="feature-card reveal">
+              <strong>Gentle timing</strong>
+              <p>Nudge waits long enough to respect thinking, then appears before frustration becomes momentum loss.</p>
+            </article>
+            <article class="feature-card reveal delay-1">
+              <strong>Short prompts</strong>
+              <p>The assistant speaks in compact steps, so the student never has to parse a wall of text when they are already stuck.</p>
+            </article>
+            <article class="feature-card reveal delay-2">
+              <strong>Confidence boost</strong>
+              <p>Students get back to action faster, which lowers the cost of making mistakes.</p>
+            </article>
+            <article class="feature-card reveal delay-3">
+              <strong>Human tone</strong>
+              <p>The guidance feels respectful and encouraging rather than robotic or corrective.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="eyebrow reveal">For educators</div>
+          <h2 class="reveal delay-1">Helps more students progress without turning every question into a support ticket.</h2>
+          <div class="deck-split" style="margin-top: 26px;">
+            <div class="grid-card reveal">
+              <strong>Better visibility</strong>
+              <p>Educators can see where students stall, which concepts trigger friction, and how often intervention was needed.</p>
+            </div>
+            <div class="grid-card reveal delay-1">
+              <strong>Less interruption</strong>
+              <p>The assistant can absorb routine stumbling blocks before they become live questions in the room.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="eyebrow reveal">Launch moment</div>
+          <h2 class="reveal delay-1">The right AI for learning should know when to speak softly.</h2>
+          <div class="deck-split" style="margin-top: 30px;">
+            <div class="scene-copy reveal">
+              <p>Nudge is built around restraint. It recognizes struggle, responds with precision, and keeps the student in control of the answer. That makes it useful in the real world, not just impressive in a demo.</p>
+              <div class="hero-actions" style="margin-top: 28px;">
+                <a class="button primary" href="#scene-11">End keynote</a>
+                <a class="button secondary" href="#scene-0">Replay</a>
+              </div>
+            </div>
+            <div class="diagram-card reveal delay-1">
+              <div class="monospace">Principles</div>
+              <strong style="margin-top: 10px;">Clear. Calm. Useful.</strong>
+              <p>Every scene in this keynote is designed to feel sharp, bright, stable, and professional from the first frame to the last.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  },
+  {
+    render: () => `
+      <section class="scene">
+        <div class="scene-inner">
+          <div class="hero-grid" style="align-items: end;">
+            <div>
+              <div class="eyebrow reveal">Nudge</div>
+              <h1 class="reveal delay-1" style="font-size: clamp(3.6rem, 8vw, 8rem); max-width: 9ch;">A keynote built to feel finished.</h1>
+            </div>
+            <div class="quote-card reveal delay-2">
+              <strong>Final note</strong>
+              <p>Use arrow keys, page keys, spacebar, wheel, trackpad, or swipe to move one scene at a time.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    `
+  }
+];
 
-async function checkStatus() { const state = await window.lunar.status(); $('status-dot').className = state.online ? 'online' : 'offline'; $('status-label').textContent = state.online ? `Gemma online · ${state.model}` : 'Ollama offline'; }
-checkStatus();
-async function createScene(prompt, image = null) {
-  $('generate').disabled = true;
-  if (qualitySelect.value !== 'preview') { try { await window.lunar.runBlenderPipeline({ quality_mode: qualitySelect.value, references: referencePaths, prompt }); } catch (error) { addMessage('system', `${qualitySelect.value} mode requires the Blender backend: ${error.message}`); $('generate').disabled = false; return; } }
-  try {
-    const spec = await window.lunar.scene({ image, prompt: `${prompt}\n\nCreate an approximate 3D model for the workspace. Return an object with an objects array. Each object needs name, primitive (box, sphere, cylinder, plane), position [x,y,z], scale [x,y,z], and color hex.` });
-    if (/heart|cardiac|atrium|ventricle|valve/i.test(prompt)) await loadAccurateModel(); else if (/airplane|aircraft|plane|jet/i.test(prompt)) renderAirplaneScene(); else renderScene(normalizeScene(spec));
-    addMessage('assistant', 'I created an editable 3D draft in the scene workspace. Drag the preview to orbit it.');
-  } catch (error) { addMessage('system', 'I could not create the 3D draft. Try uploading the diagram as an image or ask for a simpler diagram.'); }
-  $('generate').disabled = !imageBase64;
+let currentScene = 0;
+let isTransitioning = false;
+let wheelAccum = 0;
+let wheelTimer = null;
+let touchStart = null;
+let touchMoved = false;
+
+function buildDeck() {
+  track.innerHTML = scenes.map((scene, index) => `
+    <article class="scene-wrap" id="scene-${index}" aria-label="Scene ${index + 1}">
+      ${scene.render()}
+    </article>
+  `).join('');
+
+  dots.innerHTML = scenes.map((_, index) => `<button type="button" aria-label="Go to scene ${index + 1}" data-index="${index}"></button>`).join('');
+  dots.querySelectorAll('button').forEach((button) => {
+    button.addEventListener('click', () => goToScene(Number(button.dataset.index)));
+  });
+
+  requestAnimationFrame(() => {
+    updateScene(true);
+  });
 }
-async function sendPrompt(text) { const input = $('prompt'); addMessage('user', text); try { const reply = await window.lunar.chat(text); addMessage('assistant', reply.length > 900 ? `${reply.slice(0, 900).trim()}…` : reply); if (/\b(make|create|build|generate|model|render|design|3d|diagram|object|airplane|aircraft|heart|anatom|structure|system|graph)\b/i.test(text + ' ' + reply)) { group.clear(); await createScene(`${text}\nModel response:\n${reply}`, imageBase64); } } catch (error) { input.value = text; const retry = document.createElement('button'); retry.className = 'retry'; retry.textContent = 'Retry'; retry.onclick = () => { retry.remove(); sendPrompt(text); }; const message = document.createElement('div'); message.className = 'message system'; message.textContent = `Request failed: ${error.message || 'Ollama is unavailable'}`; message.append(retry); messages.append(message); } }
-$('composer').addEventListener('submit', async (event) => { event.preventDefault(); const input = $('prompt'); const text = input.value.trim(); if (!text || input.dataset.busy === 'true') return; input.value = ''; input.dataset.busy = 'true'; try { await sendPrompt(text); } finally { input.dataset.busy = 'false'; } });
-$('mic').addEventListener('click', () => { if (!('webkitSpeechRecognition' in window)) return addMessage('system', 'Speech recognition is unavailable in this Electron build.'); if (recognition) { recognition.stop(); return; } recognition = new webkitSpeechRecognition(); recognition.continuous = false; recognition.interimResults = false; recognition.onresult = (event) => { $('prompt').value = event.results[0][0].transcript; $('composer').requestSubmit(); }; recognition.onend = () => { recognition = null; $('mic').classList.remove('recording'); }; recognition.start(); $('mic').classList.add('recording'); });
 
-$('upload').addEventListener('click', async () => { const file = await window.lunar.pickImage(); if (!file) return; imageBase64 = await window.lunar.readImage(file); const extension = file.split('.').pop().toLowerCase(); const mime = extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg'; referenceImage.src = `data:${mime};base64,${imageBase64}`; referenceImage.classList.add('visible'); $('diagram-label').textContent = file.split('/').pop(); $('generate').disabled = false; });
-$('generate').addEventListener('click', () => createScene('Analyze the uploaded diagram as a coarse 3D scene.', imageBase64));
-accurateButton.addEventListener('click', () => loadAccurateModel());
-localModelButton.addEventListener('click', async () => { const file = await window.lunar.pickModel(); if (!file) return; try { const bytes = await window.lunar.readModel(file); await loadModelBytes(bytes, file.split('.').pop().toLowerCase()); addMessage('assistant', `Loaded ${file.split('/').pop()} into the 3D workspace.`); } catch (error) { addMessage('system', `This model could not be opened: ${error.message || 'unsupported format'}`); } });
-
-const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(42, 1, .1, 100); camera.position.set(0, .5, 9); const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setPixelRatio(devicePixelRatio); renderer.outputColorSpace = THREE.SRGBColorSpace; $('viewport').append(renderer.domElement); const group = new THREE.Group(); scene.add(group); scene.add(new THREE.HemisphereLight(0xffeee8, 0x18202c, 2.4)); const light = new THREE.DirectionalLight(0xffd9ba, 3.5); light.position.set(3, 5, 5); scene.add(light); let dragging = false, lastX = 0; $('viewport').addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; }); window.addEventListener('pointerup', () => dragging = false); window.addEventListener('pointermove', (e) => { if (dragging) { group.rotation.y += (e.clientX - lastX) * .01; lastX = e.clientX; } });
-async function loadModelBytes(bytes, extension = 'glb') { const buffer = bytes instanceof Uint8Array ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : bytes; let model; if (extension === 'stl') { const geometry = new STLLoader().parse(buffer); if (!geometry.attributes.position || geometry.attributes.position.count === 0) throw new Error('STL contains no vertices'); geometry.computeVertexNormals(); geometry.computeBoundingBox(); geometry.computeBoundingSphere(); const size = geometry.boundingBox.getSize(new THREE.Vector3()); if (![size.x, size.y, size.z].every(Number.isFinite) || Math.max(size.x, size.y, size.z) <= 0) throw new Error('STL has invalid dimensions'); model = new THREE.Mesh(geometry, new THREE.MeshPhysicalMaterial({ color: '#8b303d', roughness: .58, clearcoat: .18 })); } else { if (extension !== 'glb' && extension !== 'gltf') throw new Error('Use GLB, GLTF, or STL models'); const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(buffer, '', resolve, reject)); model = gltf.scene; model.traverse((node) => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; if (node.material) { node.material = node.material.clone(); node.material.roughness = .42; node.material.metalness = .02; } } }); } const box = new THREE.Box3().setFromObject(model); const size = box.getSize(new THREE.Vector3()); const center = box.getCenter(new THREE.Vector3()); const scale = 4.8 / Math.max(size.x, size.y, size.z); model.scale.setScalar(scale); model.position.sub(center.multiplyScalar(scale)); group.clear(); group.add(model); document.querySelectorAll('.heart-annotation').forEach((node) => node.remove()); heartAnnotationAnchors = extension === 'stl' ? addHeartAnnotations(model) : []; }
-async function loadAccurateModel() { accurateButton.disabled = true; accurateButton.textContent = 'Loading NIH STL…'; try { const bytes = await window.lunar.fetchLocalHeart(); await loadModelBytes(bytes, 'stl'); addMessage('assistant', 'Loaded heart_NIH3D.stl with anatomical annotations. Drag to orbit the source mesh.'); } catch (error) { renderHeartScene(); addMessage('system', `The local heart mesh could not be loaded (${error.message || 'unavailable'}). Showing the procedural fallback instead.`); } accurateButton.disabled = false; accurateButton.textContent = '⌁ Load NIH heart'; }
-function addHeartAnnotations(model) { const labels = [['Aorta', new THREE.Vector3(.25, 1.9, .15)], ['Pulmonary trunk', new THREE.Vector3(-.45, 1.35, .25)], ['Right atrium', new THREE.Vector3(-1.05, .65, .35)], ['Left ventricle', new THREE.Vector3(.55, -.55, .45)], ['Apex', new THREE.Vector3(.05, -1.65, .2)]]; return labels.map(([text, point]) => { const node = document.createElement('div'); node.className = 'heart-annotation'; node.textContent = text; $('viewport').append(node); return { text, point, node, model }; }); }
-function updateHeartAnnotations() { const rect = $('viewport').getBoundingClientRect(); heartAnnotationAnchors.forEach(({ point, node, model }) => { const projected = point.clone().applyMatrix4(model.matrixWorld).project(camera); const visible = projected.z > -1 && projected.z < 1; node.style.display = visible ? 'block' : 'none'; node.style.left = `${(projected.x * .5 + .5) * rect.width}px`; node.style.top = `${(-projected.y * .5 + .5) * rect.height}px`; }); }
-function normalizeScene(spec) { const objects = Array.isArray(spec) ? spec : spec.objects || spec.components || spec.parts || []; return { objects: objects.map((item, index) => ({ name: item.name || `Part ${index + 1}`, primitive: item.primitive || item.type || 'box', position: item.position || [0, index * 0.8, 0], scale: item.scale || [1, 1, 1], color: item.color || ['#e8a878', '#6d9dc5', '#9dc27c', '#c88ed4'][index % 4] })) }; }
-function renderHeartScene() {
-  group.clear();
-  const heartMaterial = new THREE.MeshPhysicalMaterial({ color: '#7d2636', roughness: .54, metalness: 0, clearcoat: .18, clearcoatRoughness: .34, flatShading: false, transparent: false, side: THREE.DoubleSide });
-  const profile = [[0, -1.55], [.34, -1.5], [.72, -1.25], [1.08, -.78], [1.28, -.1], [1.32, .52], [1.2, 1.02], [.96, 1.45], [.58, 1.7], [0, 1.76]].map(([radius, y]) => new THREE.Vector2(radius, y));
-  const heart = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), heartMaterial); heart.scale.set(.96, 1, .82); heart.rotation.x = -.08; heart.rotation.y = -.16; heart.position.x = .02; group.add(heart);
-  const lobeMaterial = new THREE.MeshPhysicalMaterial({ color: '#a13c4a', roughness: .58, metalness: 0, clearcoat: .16 }); const lobe = (x, y, z, scale) => { const node = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 24), lobeMaterial); node.position.set(x, y, z); node.scale.set(...scale); group.add(node); }; lobe(-.58, 1.08, .08, [.62, .54, .58]); lobe(.5, 1.18, .1, [.72, .64, .62]);
-  const chamber = (x, y, z, color, scale) => { const node = new THREE.Mesh(new THREE.SphereGeometry(.32, 32, 24), new THREE.MeshPhysicalMaterial({ color, roughness: .3, clearcoat: .35 })); node.position.set(x, y, z); node.scale.set(...scale); group.add(node); };
-  const cavity = (x, y, z, color, scale) => { const node = new THREE.Mesh(new THREE.SphereGeometry(.5, 48, 32), new THREE.MeshPhysicalMaterial({ color, roughness: .72, clearcoat: .08 })); node.position.set(x, y, z); node.scale.set(...scale); group.add(node); const rim = new THREE.Mesh(new THREE.TorusGeometry(.46, .035, 16, 48), new THREE.MeshPhysicalMaterial({ color: '#d58a83', roughness: .46 })); rim.position.set(x, y, z + .29); rim.scale.set(scale[0] / .55, scale[1] / .55, 1); rim.rotation.x = Math.PI / 2; group.add(rim); };
-  cavity(-.47, .43, 1.02, '#315f91', [.72, .58, .28]); cavity(.47, .43, 1.02, '#7e303d', [.72, .58, .28]); cavity(-.47, -.4, 1.08, '#234e80', [.86, 1.04, .3]); cavity(.47, -.4, 1.08, '#702330', [.86, 1.04, .3]);
-  const septum = new THREE.Mesh(new THREE.BoxGeometry(.09, 1.75, .1), new THREE.MeshPhysicalMaterial({ color: '#d98f86', roughness: .42, clearcoat: .16 })); septum.position.set(0, -.08, 1.42); septum.rotation.z = -.08; group.add(septum);
-  const tube = (points, radius, color) => { const curve = new THREE.CatmullRomCurve3(points.map(([x, y, z]) => new THREE.Vector3(x, y, z))); const node = new THREE.Mesh(new THREE.TubeGeometry(curve, 32, radius, 12, false), new THREE.MeshPhysicalMaterial({ color, roughness: .24, clearcoat: .5 })); group.add(node); };
-  tube([[-.8, .9, 1.08], [-.25, .62, 1.1], [.1, .2, 1.12], [.45, -.18, 1.1], [.75, -.62, 1.04]], .045, '#641e2b'); tube([[.8, .82, 1.06], [.25, .55, 1.1], [-.1, .05, 1.13], [-.42, -.55, 1.06]], .038, '#701f2d');
-  tube([[-.74, 1.18, .1], [-1.15, 1.55, .1], [-1.1, 1.95, .1], [-.82, 2.18, .1]], .22, '#b94a50'); tube([[.35, 1.28, .12], [.65, 1.68, .12], [.45, 2.08, .12], [.15, 2.3, .12]], .2, '#c95858');
-  tube([[.15, 2.28, .12], [.45, 2.53, .12], [.83, 2.52, .12]], .13, '#cf6860'); tube([[.32, 2.35, .12], [.75, 2.76, .12], [1.1, 2.72, .12]], .11, '#cf6860'); tube([[.5, 2.38, .12], [.95, 2.95, .12], [1.18, 2.96, .12]], .1, '#cf6860');
-  const valveMaterial = new THREE.MeshPhysicalMaterial({ color: '#e8b66b', roughness: .3, clearcoat: .25 }); const valve = new THREE.Mesh(new THREE.TorusGeometry(.22, .055, 20, 40), valveMaterial); valve.position.set(-.43, -.04, 1.52); valve.rotation.x = Math.PI / 2; group.add(valve); const valve2 = valve.clone(); valve2.position.x = .43; group.add(valve2);
-  const tissueMaterial = new THREE.MeshPhysicalMaterial({ color: '#b33f50', roughness: .38, clearcoat: .25 }); const muscleMaterial = new THREE.MeshPhysicalMaterial({ color: '#7c2635', roughness: .46 });
-  const muscle = (x, y, z, scale) => { const node = new THREE.Mesh(new THREE.SphereGeometry(.13, 20, 14), muscleMaterial); node.position.set(x, y, z); node.scale.set(...scale); group.add(node); };
-  muscle(-.72, -.55, 1.42, [.8, 1.4, .7]); muscle(.72, -.55, 1.42, [.8, 1.4, .7]); muscle(-.38, .12, 1.47, [.45, .65, .45]); muscle(.38, .12, 1.47, [.45, .65, .45]); tube([[-.6, .1, 1.48], [-.55, -.35, 1.5], [-.72, -.58, 1.48]], .022, '#e9c4a5'); tube([[-.28, .1, 1.48], [-.38, -.28, 1.5], [-.72, -.58, 1.48]], .018, '#e9c4a5'); tube([[.6, .1, 1.48], [.55, -.35, 1.5], [.72, -.58, 1.48]], .022, '#e9c4a5'); tube([[.28, .1, 1.48], [.38, -.28, 1.5], [.72, -.58, 1.48]], .018, '#e9c4a5');
-  tube([[-1.05, .48, 1.28], [-.72, .72, 1.34], [-.3, .78, 1.38], [.05, .55, 1.4]], .055, '#555a60'); tube([[.12, .62, 1.4], [.48, .8, 1.38], [.9, .62, 1.3], [1.1, .34, 1.2]], .05, '#555a60');
-  const arterial = new THREE.MeshPhysicalMaterial({ color: '#73797e', roughness: .82, metalness: 0, flatShading: true }); const branch = (points, radius) => { const curve = new THREE.CatmullRomCurve3(points.map(([x, y, z]) => new THREE.Vector3(x, y, z))); const node = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, radius, 10, false), arterial); group.add(node); };
-  branch([[.12, 1.85, .15], [.05, 2.15, .18], [.18, 2.38, .18], [.5, 2.52, .18]], .16); branch([[.18, 2.38, .18], [.5, 2.7, .18], [.78, 2.76, .18]], .09); branch([[.18, 2.38, .18], [.12, 2.78, .18], [.3, 3.02, .18]], .08);
-  branch([[-.2, 1.45, .12], [-.55, 1.78, .12], [-.78, 2.12, .12], [-.72, 2.52, .12]], .17); branch([[-.72, 2.5, .12], [-.92, 2.82, .12], [-.9, 3.12, .12]], .1); branch([[-.72, 2.5, .12], [-.48, 2.85, .12], [-.42, 3.12, .12]], .1); branch([[.94, 1.35, .12], [1.35, 1.48, .12], [1.62, 1.62, .12]], .13); branch([[.95, 1.02, .1], [1.42, .95, .1], [1.7, .78, .1]], .1);
-  group.rotation.y = -.24; group.rotation.x = .04;
-  group.scale.set(.82, .82, .82); group.position.y = -.25;
+function updateScene(immediate = false) {
+  track.style.transitionDuration = immediate ? '0ms' : '720ms';
+  track.style.transform = `translate3d(${-currentScene * 100}vw, 0, 0)`;
+  progress.textContent = `${String(currentScene + 1).padStart(2, '0')} / ${String(scenes.length).padStart(2, '0')}`;
+  dots.querySelectorAll('button').forEach((button, index) => {
+    button.classList.toggle('active', index === currentScene);
+  });
+  document.documentElement.style.scrollBehavior = 'auto';
 }
 
-function renderAirplaneScene() {
-  group.clear();
-  const metal = new THREE.MeshPhysicalMaterial({ color: '#d8e1eb', roughness: .24, metalness: .18, clearcoat: .5 }); const dark = new THREE.MeshPhysicalMaterial({ color: '#26384e', roughness: .25, metalness: .3 }); const blue = new THREE.MeshPhysicalMaterial({ color: '#477da8', roughness: .28, metalness: .15 });
-  const add = (geometry, material, position, rotation = [0, 0, 0], scale = [1, 1, 1]) => { const node = new THREE.Mesh(geometry, material); node.position.set(...position); node.rotation.set(...rotation); node.scale.set(...scale); group.add(node); return node; };
-  add(new THREE.CylinderGeometry(.46, .52, 4.8, 32), metal, [0, 0, 0], [0, 0, Math.PI / 2]);
-  add(new THREE.ConeGeometry(.46, 1.15, 32), metal, [2.95, 0, 0], [0, 0, -Math.PI / 2]); add(new THREE.SphereGeometry(.48, 32, 20), metal, [-2.3, 0, 0], [0, 0, 0], [1.2, .95, .95]);
-  add(new THREE.BoxGeometry(3.2, .12, 7.4), blue, [.15, -.05, 0], [0, 0, 0], [1, 1, .72]); add(new THREE.BoxGeometry(1.6, .1, 3.2), blue, [-1.7, .72, 0], [0, 0, 0], [1, 1, .55]);
-  add(new THREE.BoxGeometry(1.2, .12, 2.4), metal, [-1.82, .72, 0], [0, 0, 0], [1, 1, .45]);
-  for (const z of [-1.62, 1.62]) { add(new THREE.CylinderGeometry(.3, .34, 1.15, 24), dark, [.25, -.52, z], [Math.PI / 2, 0, 0]); add(new THREE.TorusGeometry(.3, .07, 12, 24), metal, [.25, -.52, z], [Math.PI / 2, 0, 0]); }
-  for (let i = -2; i <= 2; i++) add(new THREE.BoxGeometry(.16, .12, .32), dark, [1.9 - i * .5, .43, -.48], [0, 0, 0]);
-  group.rotation.y = -.25; group.rotation.x = .08; group.scale.setScalar(.72); group.position.y = -.15;
+function goToScene(nextScene) {
+  if (isTransitioning || nextScene === currentScene) return;
+  currentScene = Math.max(0, Math.min(scenes.length - 1, nextScene));
+  isTransitioning = true;
+  updateScene();
+  window.clearTimeout(wheelTimer);
+  wheelTimer = window.setTimeout(() => {
+    isTransitioning = false;
+  }, 760);
 }
-function renderScene(spec) { group.clear(); normalizeScene(spec).objects.forEach((item) => { const geometry = item.primitive === 'sphere' ? new THREE.SphereGeometry(.65, 32, 20) : item.primitive === 'cylinder' ? new THREE.CylinderGeometry(.55, .55, 1.2, 32) : item.primitive === 'plane' ? new THREE.PlaneGeometry(1, 1) : new THREE.BoxGeometry(1, 1, 1); const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: item.color || '#e8a878', roughness: .55 })); mesh.position.set(...(item.position || [0, 0, 0])); mesh.scale.set(...(item.scale || [1, 1, 1])); group.add(mesh); }); }
-renderScene({ objects: [{ primitive: 'box', position: [0, 0, 0], scale: [2.2, .7, 1.4], color: '#e8a878' }, { primitive: 'cylinder', position: [0, -1, 0], scale: [.5, 1, .5], color: '#6d9dc5' }] });
-function resize() { const box = $('viewport').getBoundingClientRect(); camera.aspect = box.width / box.height; camera.updateProjectionMatrix(); renderer.setSize(box.width, box.height); } new ResizeObserver(resize).observe($('viewport')); resize(); (function animate() { requestAnimationFrame(animate); updateHeartAnnotations(); renderer.render(scene, camera); })();
+
+function stepScene(direction) {
+  goToScene(currentScene + direction);
+}
+
+function onWheel(event) {
+  event.preventDefault();
+  if (isTransitioning) return;
+  wheelAccum += Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+  window.clearTimeout(wheelTimer);
+  wheelTimer = window.setTimeout(() => {
+    wheelAccum = 0;
+  }, 120);
+  const threshold = 60;
+  if (Math.abs(wheelAccum) >= threshold) {
+    const direction = wheelAccum > 0 ? 1 : -1;
+    wheelAccum = 0;
+    stepScene(direction);
+  }
+}
+
+function onKeydown(event) {
+  const keys = ['ArrowDown', 'PageDown', ' ', 'Spacebar'];
+  const backwards = ['ArrowUp', 'PageUp'];
+  if (!keys.includes(event.key) && !backwards.includes(event.key)) return;
+  event.preventDefault();
+  if (isTransitioning) return;
+  if (keys.includes(event.key)) stepScene(1);
+  else stepScene(-1);
+}
+
+function onPointerDown(event) {
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  touchStart = { x: event.clientX, y: event.clientY, time: performance.now() };
+  touchMoved = false;
+}
+
+function onPointerMove(event) {
+  if (!touchStart) return;
+  if (Math.abs(event.clientX - touchStart.x) > 8 || Math.abs(event.clientY - touchStart.y) > 8) touchMoved = true;
+}
+
+function onPointerUp(event) {
+  if (!touchStart) return;
+  const dx = event.clientX - touchStart.x;
+  const dy = event.clientY - touchStart.y;
+  const elapsed = performance.now() - touchStart.time;
+  touchStart = null;
+  if (isTransitioning || !touchMoved || elapsed > 900) return;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 48) stepScene(dx < 0 ? 1 : -1);
+  else if (Math.abs(dy) > 48) stepScene(dy < 0 ? 1 : -1);
+}
+
+buildDeck();
+
+deck.addEventListener('click', (event) => {
+  const link = event.target.closest('a.button[href^="#scene-"]');
+  if (!link) return;
+  event.preventDefault();
+  const index = Number(link.getAttribute('href').replace('#scene-', ''));
+  if (Number.isFinite(index)) goToScene(index);
+});
+
+window.addEventListener('wheel', onWheel, { passive: false });
+window.addEventListener('keydown', onKeydown);
+window.addEventListener('pointerdown', onPointerDown, { passive: true });
+window.addEventListener('pointermove', onPointerMove, { passive: true });
+window.addEventListener('pointerup', onPointerUp, { passive: true });
+window.addEventListener('pointercancel', () => { touchStart = null; touchMoved = false; }, { passive: true });
+window.addEventListener('resize', () => updateScene(true));
+window.addEventListener('load', () => updateScene(true));
