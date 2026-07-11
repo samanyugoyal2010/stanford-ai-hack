@@ -19,6 +19,8 @@ LUNAR_OLLAMA_MODEL=your-model-tag npm start
 
 The model name is read by the Electron main process, keeping Ollama access outside the renderer. Upload an image, then choose `Generate 3D draft`; the result is a simple JSON scene made of boxes, spheres, and cylinders that can be orbited in the preview.
 
+For higher-fidelity anatomy, choose `Find accurate model`. Lunar loads the NIH 3D `VH_M_Heart.glb` reference asset from the NIH 3D media store. Treat downloaded third-party assets according to their source license and attribution requirements.
+
 ## Development
 
 ```bash
