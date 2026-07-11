@@ -20,6 +20,9 @@ final class AppLogger: Sendable {
         case audio
         case database
         case ui
+        case pipeline
+        case everos
+        case ollama
     }
 
     private let subsystem = Bundle.main.bundleIdentifier ?? "com.studyflow.app"

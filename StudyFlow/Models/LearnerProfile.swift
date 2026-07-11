@@ -6,6 +6,31 @@ enum LearnerProfileSource: String, Codable, Sendable {
     case manual
     case upload
     case remote
+    case hybrid
+}
+
+/// Pipeline stage for hybrid EverOS → Gemma synthesis (UI status line).
+enum HybridSynthesisStatus: String, Sendable, Equatable {
+    case idle
+    case everOSExtracted
+    case gemmaSynthesizing
+    case ready
+    case gemmaUnavailable
+
+    var displayMessage: String {
+        switch self {
+        case .idle:
+            return "Idle"
+        case .everOSExtracted:
+            return "EverOS extracted → preparing Gemma…"
+        case .gemmaSynthesizing:
+            return "EverOS extracted → Gemma synthesizing…"
+        case .ready:
+            return "Ready — ideal learner profile available"
+        case .gemmaUnavailable:
+            return "Gemma offline — showing EverOS raw traits"
+        }
+    }
 }
 
 /// Local view of an EverOS user profile for StudyFlow UI and Gemma context.
@@ -17,9 +42,12 @@ struct LearnerProfileSnapshot: Identifiable, Sendable, Equatable, Codable {
     var rawJSON: String
     var updatedAt: Date
     var source: LearnerProfileSource
+    /// Structured ideal profile when hybrid Gemma synthesis succeeds.
+    var ideal: IdealLearnerProfile?
+    var synthesisStatus: HybridSynthesisStatus?
 
     var isEmpty: Bool {
-        explicitInfo.isEmpty && implicitTraits.isEmpty
+        explicitInfo.isEmpty && implicitTraits.isEmpty && (ideal?.isEmpty ?? true)
     }
 
     var displayLines: [String] {
@@ -40,7 +68,9 @@ struct LearnerProfileSnapshot: Identifiable, Sendable, Equatable, Codable {
         implicitTraits: [String: String] = [:],
         rawJSON: String = "{}",
         updatedAt: Date = Date(),
-        source: LearnerProfileSource = .remote
+        source: LearnerProfileSource = .remote,
+        ideal: IdealLearnerProfile? = nil,
+        synthesisStatus: HybridSynthesisStatus? = nil
     ) {
         self.id = id
         self.userId = userId
@@ -49,6 +79,8 @@ struct LearnerProfileSnapshot: Identifiable, Sendable, Equatable, Codable {
         self.rawJSON = rawJSON
         self.updatedAt = updatedAt
         self.source = source
+        self.ideal = ideal
+        self.synthesisStatus = synthesisStatus
     }
 
     static func from(everOS item: EverOSProfileItem, userId: String, source: LearnerProfileSource) -> LearnerProfileSnapshot {
@@ -62,3 +94,6 @@ struct LearnerProfileSnapshot: Identifiable, Sendable, Equatable, Codable {
         )
     }
 }
+
+// Manual Codable for HybridSynthesisStatus stored as raw string optionally.
+extension HybridSynthesisStatus: Codable {}

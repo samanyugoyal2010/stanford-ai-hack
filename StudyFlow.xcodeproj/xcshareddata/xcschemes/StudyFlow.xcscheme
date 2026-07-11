@@ -55,6 +55,11 @@
             value = "8fe61e32-2ede-4ec6-9858-c888d2178e06"
             isEnabled = "YES">
          </EnvironmentVariable>
+               <EnvironmentVariable
+            key = "STUDYFLOW_OLLAMA_MODEL"
+            value = "gemma4:e2b-it-qat"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction

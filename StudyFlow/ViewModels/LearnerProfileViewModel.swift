@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import UniformTypeIdentifiers
 
-/// Drives the Learner Profile setup UI (observe / describe / upload).
+/// Drives the Learner Profile setup UI (observe / describe / upload + hybrid status).
 @Observable
 @MainActor
 final class LearnerProfileViewModel {
@@ -48,6 +48,30 @@ final class LearnerProfileViewModel {
         EverOSCredentialStore().apiKey() != nil
     }
 
+    var hybridStatus: HybridSynthesisStatus {
+        profile?.synthesisStatus
+            ?? container.hybridPipeline.status
+    }
+
+    var ollamaModelName: String {
+        AppConstants.defaultModelName
+    }
+
+    var activityLog: PipelineActivityLog {
+        PipelineActivityLog.shared
+    }
+
+    var isBusy: Bool {
+        container.manualProfileIngestor.isBusy
+            || container.observationCoordinator.isRunning
+            || container.hybridPipeline.status == .gemmaSynthesizing
+            || container.hybridPipeline.status == .everOSExtracted
+    }
+
+    func clearActivityLog() {
+        activityLog.clear()
+    }
+
     func startObservation() async {
         errorMessage = nil
         statusMessage = "Starting screen observation…"
@@ -62,11 +86,15 @@ final class LearnerProfileViewModel {
 
     func stopObservation() async {
         errorMessage = nil
-        statusMessage = "Stopping and asking EverOS to extract your learner profile…"
+        statusMessage = "EverOS extracting… then Gemma will synthesize your ideal profile."
         do {
             if let snapshot = try await container.observationCoordinator.stopSession() {
                 profile = snapshot
-                statusMessage = "Profile updated from observation."
+                statusMessage = snapshot.synthesisStatus?.displayMessage
+                    ?? "Profile updated from observation."
+                if snapshot.synthesisStatus == .gemmaUnavailable {
+                    errorMessage = container.hybridPipeline.lastError
+                }
             } else {
                 statusMessage = "Session saved. Profile may still be extracting — try Refresh."
             }
@@ -78,13 +106,22 @@ final class LearnerProfileViewModel {
 
     func saveDescription() async {
         errorMessage = nil
-        statusMessage = "Saving description to EverOS…"
+        statusMessage = "Saving to EverOS… then Gemma will synthesize your ideal profile."
         do {
             if let snapshot = try await container.manualProfileIngestor.ingestDescription(describeText) {
                 profile = snapshot
-                statusMessage = "Profile updated from your description."
+                if let ideal = snapshot.ideal, !ideal.isEmpty {
+                    statusMessage = "Ideal profile ready (\(snapshot.synthesisStatus?.displayMessage ?? "done"))."
+                } else if snapshot.synthesisStatus == .gemmaUnavailable {
+                    statusMessage = HybridSynthesisStatus.gemmaUnavailable.displayMessage
+                    errorMessage = container.hybridPipeline.lastError
+                } else {
+                    statusMessage = "Saved — EverOS traits may still be thin; ideal synthesis used your description."
+                }
             } else {
-                statusMessage = "Saved. Profile may still be extracting — try Refresh."
+                statusMessage = "Save finished but no snapshot returned — check Activity Log."
+                errorMessage = container.manualProfileIngestor.lastError
+                    ?? container.hybridPipeline.lastError
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -106,7 +143,11 @@ final class LearnerProfileViewModel {
                 fileName: url.lastPathComponent
             ) {
                 profile = snapshot
-                statusMessage = "Profile updated from uploaded file."
+                statusMessage = snapshot.synthesisStatus?.displayMessage
+                    ?? "Profile updated from uploaded file."
+                if snapshot.synthesisStatus == .gemmaUnavailable {
+                    errorMessage = container.hybridPipeline.lastError
+                }
             } else {
                 statusMessage = "Uploaded. Profile may still be extracting — try Refresh."
             }
@@ -118,12 +159,22 @@ final class LearnerProfileViewModel {
 
     func refreshProfile() async {
         errorMessage = nil
-        statusMessage = "Refreshing profile from EverOS…"
+        statusMessage = "Refreshing from EverOS + Gemma…"
         do {
-            if let snapshot = try await container.remoteMemory.fetchProfile(userId: everOSUserId) {
-                profile = snapshot
-                try? container.database.saveLearnerProfile(snapshot)
-                statusMessage = "Profile refreshed."
+            let base = try await container.remoteMemory.fetchProfile(userId: everOSUserId)
+            let refined = await container.hybridPipeline.refine(
+                baseProfile: base,
+                sessionId: nil,
+                samplesSent: 0,
+                recentOCRExcerpts: [],
+                intakeSource: .remote
+            )
+            if let refined {
+                profile = refined
+                statusMessage = refined.synthesisStatus?.displayMessage ?? "Profile refreshed."
+                if refined.synthesisStatus == .gemmaUnavailable {
+                    errorMessage = container.hybridPipeline.lastError
+                }
             } else {
                 statusMessage = "No profile found yet for this user."
             }

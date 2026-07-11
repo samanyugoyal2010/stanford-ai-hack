@@ -14,6 +14,7 @@ final class AppDependencyContainer {
     let ocrPipeline: OCRProcessingPipeline
     let everOSClient: EverOSClient
     let everOSUploader: EverOSObjectUploader
+    let profileSynthesizer: LearnerProfileSynthesizer
 
     // MARK: - Pipeline stages
 
@@ -26,6 +27,7 @@ final class AppDependencyContainer {
     let remoteMemory: EverOSMemoryService
     let ai: GemmaService
     let voiceOutput: VoiceOutputManager
+    let hybridPipeline: HybridProfilePipeline
     let observationCoordinator: ObservationSessionCoordinator
     let manualProfileIngestor: ManualProfileIngestor
 
@@ -36,6 +38,7 @@ final class AppDependencyContainer {
         let ocrPipeline = OCRProcessingPipeline()
         let everOSClient = EverOSClient()
         let everOSUploader = EverOSObjectUploader(client: everOSClient)
+        let profileSynthesizer = LearnerProfileSynthesizer(ollama: ollamaClient)
 
         self.database = database
         self.ollamaClient = ollamaClient
@@ -43,26 +46,40 @@ final class AppDependencyContainer {
         self.ocrPipeline = ocrPipeline
         self.everOSClient = everOSClient
         self.everOSUploader = everOSUploader
+        self.profileSynthesizer = profileSynthesizer
 
-        self.screenCapture = ScreenCaptureManager()
-        self.visionOCR = VisionOCRManager(pipeline: ocrPipeline)
+        let screenCapture = ScreenCaptureManager()
+        let visionOCR = VisionOCRManager(pipeline: ocrPipeline)
+        self.screenCapture = screenCapture
+        self.visionOCR = visionOCR
         self.speechRecognition = SpeechRecognitionManager(audioConfigurator: audioConfigurator)
         self.contextBuilder = ContextBuilder()
         self.behaviorAnalysis = BehaviorAnalysisEngine()
         self.memory = MemoryManager(store: database)
+
         let remoteMemory = EverOSMemoryService(client: everOSClient, uploader: everOSUploader)
         self.remoteMemory = remoteMemory
         self.ai = GemmaService(client: ollamaClient, remoteMemory: remoteMemory)
         self.voiceOutput = VoiceOutputManager()
+
+        let hybridPipeline = HybridProfilePipeline(
+            remoteMemory: remoteMemory,
+            synthesizer: profileSynthesizer,
+            database: database
+        )
+        self.hybridPipeline = hybridPipeline
+
         self.observationCoordinator = ObservationSessionCoordinator(
             screenCapture: screenCapture,
             visionOCR: visionOCR,
             remoteMemory: remoteMemory,
-            database: database
+            database: database,
+            hybridPipeline: hybridPipeline
         )
         self.manualProfileIngestor = ManualProfileIngestor(
             remoteMemory: remoteMemory,
-            database: database
+            database: database,
+            hybridPipeline: hybridPipeline
         )
 
         try? database.open()

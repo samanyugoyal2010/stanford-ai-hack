@@ -19,26 +19,32 @@ final class EverOSMemoryService: RemoteMemoryProviding {
 
     func addMessages(userId: String, sessionId: String?, messages: [EverOSMessage]) async throws {
         _ = try await client.addMemories(userId: userId, sessionId: sessionId, messages: messages)
-        AppLogger.shared.info(
-            "EverOS addMessages count=\(messages.count) session=\(sessionId ?? "nil")",
-            category: .ai
+        PipelineActivityLog.shared.info(
+            "EverOS",
+            "addMessages ok · count=\(messages.count) · session=\(sessionId ?? "nil")"
         )
     }
 
     func flush(userId: String, sessionId: String?) async throws {
         let result = try await client.flush(userId: userId, sessionId: sessionId)
-        AppLogger.shared.info(
-            "EverOS flush status=\(result.status ?? "unknown")",
-            category: .ai
+        PipelineActivityLog.shared.info(
+            "EverOS",
+            "flush ok · status=\(result.status ?? "unknown") · message=\(result.message ?? "")"
         )
     }
 
     func fetchProfile(userId: String) async throws -> LearnerProfileSnapshot? {
         let data = try await client.getProfiles(userId: userId)
         guard let first = data.profiles?.first else {
+            PipelineActivityLog.shared.info("EverOS", "get profile · empty (total=\(data.totalCount ?? 0))")
             return nil
         }
-        return LearnerProfileSnapshot.from(everOS: first, userId: userId, source: .remote)
+        let snap = LearnerProfileSnapshot.from(everOS: first, userId: userId, source: .remote)
+        PipelineActivityLog.shared.info(
+            "EverOS",
+            "get profile · id=\(first.id ?? "?") · explicit=\(snap.explicitInfo.count) · implicit=\(snap.implicitTraits.count)"
+        )
+        return snap
     }
 
     func search(userId: String, query: String, memoryTypes: [String], topK: Int) async throws -> EverOSSearchResult {

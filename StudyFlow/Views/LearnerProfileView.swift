@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Setup surface for ideal learner profile: observe, describe, or upload.
+/// Setup surface for ideal learner profile: observe, describe, or upload + hybrid Gemma card.
 struct LearnerProfileView: View {
     @Bindable var viewModel: LearnerProfileViewModel
     @State private var isFileImporterPresented = false
@@ -10,6 +10,7 @@ struct LearnerProfileView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
+                hybridStatusBanner
                 apiKeyBanner
                 Picker("Mode", selection: $viewModel.selectedTab) {
                     ForEach(LearnerProfileViewModel.ProfileTab.allCases) { tab in
@@ -38,7 +39,9 @@ struct LearnerProfileView: View {
                         .foregroundStyle(.red)
                 }
 
-                profileSummary
+                idealProfileCard
+                rawProfileSummary
+                activityLogPanel
             }
             .padding(24)
             .frame(maxWidth: 900, alignment: .leading)
@@ -65,20 +68,45 @@ struct LearnerProfileView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Learner Profile")
                 .font(.largeTitle.weight(.bold))
-            Text("Teach StudyFlow how you learn — by watching a study session, describing yourself, or uploading a profile.")
+            Text("EverOS extracts traits from observation or your description; local Gemma fills a fixed ideal learner profile.")
                 .font(.body)
                 .foregroundStyle(.secondary)
-            Text("EverOS user: \(viewModel.everOSUserId)")
+                        Text("EverOS user: \(viewModel.everOSUserId) · Ollama model: \(viewModel.ollamaModelName)")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
+            Text("Console tip: Console.app → search subsystem `com.studyflow.app`")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private var hybridStatusBanner: some View {
+        Text(viewModel.hybridStatus.displayMessage)
+            .font(.callout.weight(.medium))
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(statusBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var statusBackground: Color {
+        switch viewModel.hybridStatus {
+        case .ready:
+            return Color.green.opacity(0.15)
+        case .gemmaUnavailable:
+            return Color.orange.opacity(0.15)
+        case .gemmaSynthesizing, .everOSExtracted:
+            return Color.blue.opacity(0.12)
+        case .idle:
+            return Color.primary.opacity(0.06)
         }
     }
 
     @ViewBuilder
     private var apiKeyBanner: some View {
         if !viewModel.hasAPIKey {
-            Text("Set EVEROS_API_KEY in the Xcode scheme’s Environment Variables (Product → Scheme → Edit Scheme → Run → Arguments).")
+            Text("Set EVEROS_API_KEY in the Xcode scheme’s Environment Variables.")
                 .font(.callout)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,7 +119,7 @@ struct LearnerProfileView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Observe a study session")
                 .font(.title2.weight(.semibold))
-            Text("StudyFlow captures your screen, reads on-screen text, and sends first-person study observations to EverOS. When you stop, EverOS consolidates a durable learner profile.")
+            Text("StudyFlow captures your screen and sends observations to EverOS. On stop, Gemma synthesizes your ideal learner profile.")
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 12) {
@@ -161,12 +189,51 @@ struct LearnerProfileView: View {
         .background(panelBackground)
     }
 
-    private var profileSummary: some View {
+    @ViewBuilder
+    private var idealProfileCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Current profile")
+            Text("Ideal Learner Profile")
                 .font(.title2.weight(.semibold))
 
-            if let profile = viewModel.profile, !profile.isEmpty {
+            if let ideal = viewModel.profile?.ideal, !ideal.isEmpty {
+                Text(ideal.summary)
+                    .font(.body)
+
+                labeledRow("Learning style", ideal.learningStyle)
+                labeledRow("Preferred help", ideal.preferredHelp)
+                labeledRow("Confidence", String(format: "%.0f%%", ideal.confidence * 100))
+
+                if !ideal.strengths.isEmpty {
+                    labeledRow("Strengths", ideal.strengths.joined(separator: " · "))
+                }
+                if !ideal.struggles.isEmpty {
+                    labeledRow("Struggles", ideal.struggles.joined(separator: " · "))
+                }
+                if !ideal.motivationTriggers.isEmpty {
+                    labeledRow("Motivation", ideal.motivationTriggers.joined(separator: " · "))
+                }
+                if !ideal.subjectHints.isEmpty {
+                    labeledRow("Subjects", ideal.subjectHints.joined(separator: " · "))
+                }
+                if !ideal.evidenceNotes.isEmpty {
+                    labeledRow("Evidence", ideal.evidenceNotes.joined(separator: " · "))
+                }
+            } else {
+                Text("No ideal profile yet. Complete Observe / Describe / Upload (with Ollama running) to synthesize one.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(panelBackground)
+    }
+
+    private var rawProfileSummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("EverOS raw traits")
+                .font(.title2.weight(.semibold))
+
+            if let profile = viewModel.profile, !profile.displayLines.isEmpty {
                 Text("Source: \(profile.source.rawValue) · Updated \(profile.updatedAt.formatted())")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -175,13 +242,66 @@ struct LearnerProfileView: View {
                         .font(.body)
                 }
             } else {
-                Text("No profile extracted yet.")
+                Text("No EverOS traits extracted yet.")
                     .foregroundStyle(.secondary)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(panelBackground)
+    }
+
+    private var activityLogPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Activity Log")
+                    .font(.title2.weight(.semibold))
+                Spacer()
+                if viewModel.isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button("Clear") {
+                    viewModel.clearActivityLog()
+                }
+                .disabled(viewModel.activityLog.entries.isEmpty)
+            }
+
+            Text("Live pipeline steps (also in Console.app → filter subsystem com.studyflow.app).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if viewModel.activityLog.entries.isEmpty {
+                Text("No events yet — Save Description or Start Observation to begin.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(viewModel.activityLog.entries.reversed()) { entry in
+                            Text(entry.displayLine)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(entry.isError ? Color.red : Color.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .frame(minHeight: 140, maxHeight: 220)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(panelBackground)
+    }
+
+    private func labeledRow(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value.isEmpty ? "—" : value)
+                .font(.body)
+        }
     }
 
     private var panelBackground: some View {

@@ -11,8 +11,16 @@ enum AppConstants {
     /// EverOS Cloud API base URL.
     static let everOSBaseURL = URL(string: "https://api.evermind.ai")!
 
-    /// Intended local model for Socratic guidance (not pulled in this skeleton).
-    static let defaultModelName = "gemma4"
+    /// Local Ollama model for ideal-profile synthesis.
+    /// Defaults to Gemma 4 E2B QAT (~4.3GB) for memory-efficient Mac laptops.
+    /// Override with `STUDYFLOW_OLLAMA_MODEL` if you prefer e4b / 12b.
+    static var defaultModelName: String {
+        if let env = ProcessInfo.processInfo.environment["STUDYFLOW_OLLAMA_MODEL"],
+           !env.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return env.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return "gemma4:e2b-it-qat"
+    }
 
     /// Minimum macOS version StudyFlow targets.
     static let minimumMacOSVersion = "14.0"
