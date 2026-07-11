@@ -1,0 +1,11 @@
+{
+  "name": "lunar",
+  "version": "1.0.0",
+  "description": "A local Ollama desktop assistant with diagram-to-3D scene drafts.",
+  "main": "src/main.js",
+  "scripts": { "start": "electron .", "dev": "electron .", "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js" },
+  "keywords": ["electron", "ollama", "gemma", "threejs"],
+  "license": "MIT",
+  "devDependencies": { "electron": "^36.3.2" },
+  "dependencies": { "three": "^0.176.0" }
+}

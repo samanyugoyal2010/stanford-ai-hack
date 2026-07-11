@@ -1,22 +1,27 @@
-# Lunar
+# Lunar Electron Desktop Assistant
 
-Lunar is a native macOS SwiftUI desktop assistant that talks to a local Ollama model and turns uploaded diagrams into coarse, editable 3D scene drafts.
+Lunar is an Electron/Node.js macOS desktop assistant for local Ollama chat, push-to-talk speech recognition, diagram uploads, and coarse editable 3D scene drafts rendered with Three.js.
 
-## Run in Xcode
+## Run locally
 
-1. Install the full Xcode app and select it in Xcode > Settings > Locations, or run `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer`.
-2. Open `Package.swift` in Xcode.
-3. Ensure Ollama is running with `ollama serve` and that the local model name is available as `gemma4`.
-4. If the model has another tag, set the scheme environment variable `LUNAR_OLLAMA_MODEL` to that tag.
-5. Add microphone and speech-recognition usage descriptions to the app target's Info settings before using voice input.
+```bash
+npm install
+ollama serve
+ollama list
+npm start
+```
 
-The Ollama endpoint defaults to `http://127.0.0.1:11434`. The scene generator accepts a JSON scene description and falls back to a starter scene if the response cannot be decoded.
+The app expects Ollama at `http://127.0.0.1:11434` and defaults to the model tag `gemma4`. If your downloaded model uses another tag:
 
-## Layout
+```bash
+LUNAR_OLLAMA_MODEL=your-model-tag npm start
+```
 
-- `LunarApp.swift`: app entry point.
-- `ContentView.swift`: conversation and workspace UI.
-- `OllamaClient.swift`: local inference and scene JSON transport.
-- `VoiceAgent.swift`: push-to-talk speech capture plumbing.
-- `ScenePreview.swift`: native SceneKit renderer.
-- `Models.swift`: observable workspace state and feature orchestration.
+The model name is read by the Electron main process, keeping Ollama access outside the renderer. Upload an image, then choose `Generate 3D draft`; the result is a simple JSON scene made of boxes, spheres, and cylinders that can be orbited in the preview.
+
+## Development
+
+```bash
+npm run check
+npm run dev
+```
