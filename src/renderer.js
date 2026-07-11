@@ -31,7 +31,7 @@ async function loadAccurateModel() { accurateButton.disabled = true; accurateBut
 function normalizeScene(spec) { const objects = Array.isArray(spec) ? spec : spec.objects || spec.components || spec.parts || []; return { objects: objects.map((item, index) => ({ name: item.name || `Part ${index + 1}`, primitive: item.primitive || item.type || 'box', position: item.position || [0, index * 0.8, 0], scale: item.scale || [1, 1, 1], color: item.color || ['#e8a878', '#6d9dc5', '#9dc27c', '#c88ed4'][index % 4] })) }; }
 function renderHeartScene() {
   group.clear();
-  const heartMaterial = new THREE.MeshPhysicalMaterial({ color: '#9f3445', roughness: .28, metalness: .02, clearcoat: .45, clearcoatRoughness: .2, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide });
+  const heartMaterial = new THREE.MeshPhysicalMaterial({ color: '#8e2e3f', roughness: .31, metalness: .02, clearcoat: .55, clearcoatRoughness: .18, transparent: true, opacity: .22, depthWrite: false, side: THREE.DoubleSide });
   const profile = [[0, -1.55], [.34, -1.5], [.72, -1.25], [1.08, -.78], [1.28, -.1], [1.32, .52], [1.2, 1.02], [.96, 1.45], [.58, 1.7], [0, 1.76]].map(([radius, y]) => new THREE.Vector2(radius, y));
   const heart = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), heartMaterial); heart.scale.set(.96, 1, .82); heart.rotation.x = -.08; heart.rotation.y = -.16; heart.position.x = .02; group.add(heart);
   const lobeMaterial = heartMaterial.clone(); lobeMaterial.opacity = .42; const lobe = (x, y, z, scale) => { const node = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 24), lobeMaterial); node.position.set(x, y, z); node.scale.set(...scale); group.add(node); }; lobe(-.52, 1.16, .08, [.66, .64, .66]); lobe(.48, 1.28, .1, [.72, .72, .7]);
@@ -42,7 +42,14 @@ function renderHeartScene() {
   tube([[-.8, .9, 1.08], [-.25, .62, 1.1], [.1, .2, 1.12], [.45, -.18, 1.1], [.75, -.62, 1.04]], .045, '#641e2b'); tube([[.8, .82, 1.06], [.25, .55, 1.1], [-.1, .05, 1.13], [-.42, -.55, 1.06]], .038, '#701f2d');
   tube([[-.74, 1.18, .1], [-1.15, 1.55, .1], [-1.1, 1.95, .1], [-.82, 2.18, .1]], .22, '#b94a50'); tube([[.35, 1.28, .12], [.65, 1.68, .12], [.45, 2.08, .12], [.15, 2.3, .12]], .2, '#c95858');
   tube([[.15, 2.28, .12], [.45, 2.53, .12], [.83, 2.52, .12]], .13, '#cf6860'); tube([[.32, 2.35, .12], [.75, 2.76, .12], [1.1, 2.72, .12]], .11, '#cf6860'); tube([[.5, 2.38, .12], [.95, 2.95, .12], [1.18, 2.96, .12]], .1, '#cf6860');
-  const valveMaterial = new THREE.MeshPhysicalMaterial({ color: '#e8b66b', roughness: .25, clearcoat: .4 }); const valve = new THREE.Mesh(new THREE.TorusGeometry(.17, .06, 16, 32), valveMaterial); valve.position.set(-.43, -.04, 1.42); valve.rotation.x = Math.PI / 2; group.add(valve); const valve2 = valve.clone(); valve2.position.x = .43; group.add(valve2);
+  const valveMaterial = new THREE.MeshPhysicalMaterial({ color: '#e8b66b', roughness: .25, clearcoat: .4 }); const valve = new THREE.Mesh(new THREE.TorusGeometry(.22, .055, 20, 40), valveMaterial); valve.position.set(-.43, -.04, 1.42); valve.rotation.x = Math.PI / 2; group.add(valve); const valve2 = valve.clone(); valve2.position.x = .43; group.add(valve2);
+  const tissueMaterial = new THREE.MeshPhysicalMaterial({ color: '#b33f50', roughness: .38, clearcoat: .25 }); const muscleMaterial = new THREE.MeshPhysicalMaterial({ color: '#7c2635', roughness: .46 });
+  const muscle = (x, y, z, scale) => { const node = new THREE.Mesh(new THREE.SphereGeometry(.13, 20, 14), muscleMaterial); node.position.set(x, y, z); node.scale.set(...scale); group.add(node); };
+  muscle(-.72, -.55, 1.26, [.8, 1.4, .7]); muscle(.72, -.55, 1.26, [.8, 1.4, .7]); muscle(-.38, .12, 1.31, [.45, .65, .45]); muscle(.38, .12, 1.31, [.45, .65, .45]);
+  tube([[-.6, .1, 1.43], [-.55, -.35, 1.46], [-.72, -.58, 1.42]], .018, '#f0d7b0'); tube([[-.28, .1, 1.43], [-.38, -.28, 1.46], [-.72, -.58, 1.42]], .015, '#f0d7b0'); tube([[.6, .1, 1.43], [.55, -.35, 1.46], [.72, -.58, 1.42]], .018, '#f0d7b0'); tube([[.28, .1, 1.43], [.38, -.28, 1.46], [.72, -.58, 1.42]], .015, '#f0d7b0');
+  tube([[-1.05, .48, 1.28], [-.72, .72, 1.34], [-.3, .78, 1.38], [.05, .55, 1.4]], .055, '#6f2333'); tube([[.12, .62, 1.4], [.48, .8, 1.38], [.9, .62, 1.3], [1.1, .34, 1.2]], .05, '#732436');
+  const arterial = new THREE.MeshPhysicalMaterial({ color: '#c95b58', roughness: .3, clearcoat: .35 }); const branch = (points, radius) => { const curve = new THREE.CatmullRomCurve3(points.map(([x, y, z]) => new THREE.Vector3(x, y, z))); const node = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, radius, 16, false), arterial); group.add(node); };
+  branch([[.12, 1.85, .15], [.05, 2.15, .18], [.18, 2.38, .18], [.5, 2.52, .18]], .16); branch([[.18, 2.38, .18], [.5, 2.7, .18], [.78, 2.76, .18]], .09); branch([[.18, 2.38, .18], [.12, 2.78, .18], [.3, 3.02, .18]], .08);
   group.scale.set(.82, .82, .82); group.position.y = -.25;
 }
 
