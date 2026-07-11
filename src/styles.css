@@ -5,3 +5,4 @@
 #reference-image.visible { display: block; }
 .quality-select { border: 1px solid var(--line); background: #202126; color: var(--ink); padding: 9px 10px; border-radius: 8px; font: 12px 'DM Mono', monospace; }
 .retry { margin-left: 10px; border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 6px; padding: 4px 8px; }
+.heart-annotation { position: absolute; z-index: 4; transform: translate(-50%, -50%); padding: 5px 8px; border: 1px solid #ee9b67; border-radius: 6px; background: #15161acc; color: #f6f1e9; font: 11px 'DM Mono', monospace; pointer-events: none; }

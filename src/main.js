@@ -6,6 +6,7 @@ const { spawn } = require('node:child_process');
 const ollamaURL = process.env.LUNAR_OLLAMA_URL || 'http://127.0.0.1:11434';
 const ollamaModel = process.env.LUNAR_OLLAMA_MODEL || 'gemma4:e2b-it-qat';
 const accurateHeartURL = 'https://persist-3d-media.s3.amazonaws.com/741932/VH_M_Heart.glb';
+const localHeartSTL = '/Users/venkat/Downloads/heart_NIH3D.stl';
 
 async function ollama(pathname, body) {
   const response = await fetch(`${ollamaURL}/${pathname}`, {
@@ -32,6 +33,7 @@ ipcMain.handle('ollama-scene', async (_, { prompt, image }) => {
 ipcMain.handle('pick-image', async () => { const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] }); return result.canceled ? null : result.filePaths[0]; });
 ipcMain.handle('pick-model', async () => { const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: '3D models', extensions: ['glb', 'gltf', 'obj', 'stl'] }] }); return result.canceled ? null : result.filePaths[0]; });
 ipcMain.handle('read-model', async (_, filePath) => new Uint8Array(await fs.readFile(filePath)));
+ipcMain.handle('fetch-local-heart', async () => new Uint8Array(await fs.readFile(localHeartSTL)));
 ipcMain.handle('read-image', async (_, filePath) => (await fs.readFile(filePath)).toString('base64'));
 ipcMain.handle('fetch-accurate-model', async () => { const response = await fetch(accurateHeartURL); if (!response.ok) throw new Error(`Model source returned ${response.status}`); return new Uint8Array(await response.arrayBuffer()); });
 ipcMain.handle('blender-status', async () => new Promise((resolve) => { const child = spawn(process.env.LUNAR_BLENDER || 'blender', ['--version']); let output = ''; child.stdout.on('data', (chunk) => { output += chunk; }); child.on('error', () => resolve({ available: false })); child.on('close', (code) => resolve({ available: code === 0, version: output.split('\n')[0] || null })); }));
