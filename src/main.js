@@ -22,7 +22,7 @@ ipcMain.handle('ollama-status', async () => {
   try { const response = await fetch(`${ollamaURL}/api/tags`); if (!response.ok) throw new Error(); const data = await response.json(); return { online: true, model: data.models?.[0]?.name || ollamaModel }; }
   catch { return { online: false, model: ollamaModel }; }
 });
-ipcMain.handle('ollama-chat', async (_, prompt) => (await ollama('api/chat', { model: ollamaModel, messages: [{ role: 'user', content: prompt }], stream: false })).message.content);
+ipcMain.handle('ollama-chat', async (_, prompt) => (await ollama('api/chat', { model: ollamaModel, messages: [{ role: 'system', content: 'You are Lunar, a concise desktop modeling assistant. Answer in 3 to 6 short sentences. Do not recommend other software. When the user asks for a diagram or 3D model, briefly describe the parts and say that you are creating the model in the scene workspace.' }, { role: 'user', content: prompt }], options: { num_predict: 220, temperature: 0.25 }, stream: false })).message.content);
 ipcMain.handle('ollama-scene', async (_, { prompt, image }) => {
   const data = await ollama('api/generate', { model: ollamaModel, prompt: `${prompt} Return JSON only.`, format: 'json', images: image ? [image] : undefined, stream: false });
   return JSON.parse(data.response);
