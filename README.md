@@ -11,7 +11,7 @@ ollama list
 npm start
 ```
 
-The app expects Ollama at `http://127.0.0.1:11434` and defaults to the model tag `gemma4`. If your downloaded model uses another tag:
+The app expects Ollama at `http://127.0.0.1:11434` and defaults to the model tag `gemma4:e2b-it-qat`. If your downloaded model uses another tag:
 
 ```bash
 LUNAR_OLLAMA_MODEL=your-model-tag npm start

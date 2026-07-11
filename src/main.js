@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const ollamaURL = process.env.LUNAR_OLLAMA_URL || 'http://127.0.0.1:11434';
-const ollamaModel = process.env.LUNAR_OLLAMA_MODEL || 'gemma4';
+const ollamaModel = process.env.LUNAR_OLLAMA_MODEL || 'gemma4:e2b-it-qat';
 
 async function ollama(pathname, body) {
   const response = await fetch(`${ollamaURL}/${pathname}`, {
