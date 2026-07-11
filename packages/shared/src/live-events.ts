@@ -31,6 +31,20 @@ export const liveServerMsgSchema = z.discriminatedUnion("t", [
 ]);
 export type LiveServerMsg = z.infer<typeof liveServerMsgSchema>;
 
+/** Live session persona — Study Tutor watches the screen and guides studying. */
+export const liveSessionModeSchema = z.enum(["assistant", "study_tutor"]);
+export type LiveSessionMode = z.infer<typeof liveSessionModeSchema>;
+
+/** How often the Study Tutor may speak up unprompted. */
+export const interruptLevelSchema = z.enum(["quiet", "balanced", "active"]);
+export type InterruptLevel = z.infer<typeof interruptLevelSchema>;
+
+export const turnFrameSchema = z.object({
+  data: z.string(),
+  mime: z.string(),
+  source: z.enum(["camera", "screen"]),
+});
+
 // ── client → server (JSON) ────────────────────────────────────────────────
 export const liveClientMsgSchema = z.discriminatedUnion("t", [
   // A completed user turn: the on-device STT's final transcript, plus the freshest
@@ -41,7 +55,19 @@ export const liveClientMsgSchema = z.discriminatedUnion("t", [
   z.object({
     t: z.literal("user_text"),
     text: z.string(),
-    frames: z.array(z.object({ data: z.string(), mime: z.string(), source: z.enum(["camera", "screen"]) })).optional(),
+    frames: z.array(turnFrameSchema).optional(),
+  }),
+  // Study Tutor: configure mode / goal / interrupt policy (sent right after connect).
+  z.object({
+    t: z.literal("session_config"),
+    mode: liveSessionModeSchema.default("assistant"),
+    studyGoal: z.string().optional(),
+    interruptLevel: interruptLevelSchema.optional(),
+  }),
+  // Study Tutor: proactive screen look while the student works (no spoken user text).
+  z.object({
+    t: z.literal("observe"),
+    frames: z.array(turnFrameSchema).optional(),
   }),
   // Barge-in: the user started talking over the agent — abort the in-flight LLM
   // stream. Audio is stopped locally; this only stops the server generating.

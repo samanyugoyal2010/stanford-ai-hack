@@ -33,7 +33,7 @@ export interface InCallProps {
 export function InCall(props: InCallProps) {
   const { chatId, phase, muted, cameraOn, screenOn, cameraStream, screenStream, error,
     toggleMute, toggleCamera, toggleScreen, setMic, setCam, getLevels, getBands, onEnd } = props;
-  const { userCaption, userPartial, agentCaption, agentCaptionMs, toolStatus, warming, mics, cams, micId, camId } = useLiveStore();
+  const { userCaption, userPartial, agentCaption, agentCaptionMs, toolStatus, warming, tutorStatus, sessionMode, mics, cams, micId, camId } = useLiveStore();
   const setMinimized = useUi((s) => s.setMinimized);
   const reduce = useReducedMotion();
   const sharing = cameraOn || screenOn; // orb shrinks into the bar while a visual source is on
@@ -73,10 +73,14 @@ export function InCall(props: InCallProps) {
       ? <span className="font-medium text-foreground">{agentWindow || agentCaption}</span>
       : null;
 
-  // Status line: a live tool cue while a tool runs, "Warming up…" right after
-  // connecting (both blue shimmer), otherwise the plain phase label.
-  const statusLabel = toolStatus ? `${toolMeta(toolStatus).active}…` : warming ? "Warming up…" : PHASE_LABEL[phase];
-  const statusBusy = !!toolStatus || warming;
+  // Status line: tool cue, tutor watch/observe, warm-up, or phase label.
+  const tutorLabel = sessionMode === "study_tutor" && tutorStatus === "observing"
+    ? "Watching your work…"
+    : sessionMode === "study_tutor" && tutorStatus === "watching" && phase === "idle"
+      ? "Watching · quiet"
+      : "";
+  const statusLabel = toolStatus ? `${toolMeta(toolStatus).active}…` : warming ? "Warming up…" : tutorLabel || PHASE_LABEL[phase];
+  const statusBusy = !!toolStatus || warming || tutorStatus === "observing";
 
   return (
     <div className={cn("fixed inset-0 z-40 flex flex-col bg-background", !reduce && "animate-live-in")}>

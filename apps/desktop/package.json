@@ -6,8 +6,8 @@
   "author": "OpenLive",
   "main": "main.cjs",
   "scripts": {
-    "start": "electron .",
-    "start:dev": "ELECTRON_DEV=1 electron .",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "start:dev": "env -u ELECTRON_RUN_AS_NODE ELECTRON_DEV=1 electron .",
     "pack:web": "node scripts/pack-web.cjs",
     "pack:agent": "node scripts/pack-agent.cjs",
     "prebuild": "node scripts/pack-web.cjs && node scripts/pack-agent.cjs",

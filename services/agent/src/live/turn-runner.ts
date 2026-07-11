@@ -1,7 +1,7 @@
 import { streamProvider, isReasoningModel, type Message, type Effort } from "@openlive/harness";
 import { buildTaktTools, type TaktTool, type Emit } from "../tools.js";
 import { collectTurn } from "../turn.js";
-import { buildLivePrompt } from "../prompt.js";
+import { buildLivePrompt, type LivePromptOpts } from "../prompt.js";
 import { resolveLive, resolveVision, type ResolvedLive } from "../providers.js";
 import { runWorker } from "./worker.js";
 
@@ -43,8 +43,15 @@ const LIVE_TOOL_DENY = new Set<string>([]);
 export class LiveTurnRunner {
   private messages: Message[];
 
-  constructor(private extraTools: TaktTool[]) {
-    this.messages = [{ role: "system", text: buildLivePrompt() }];
+  constructor(private extraTools: TaktTool[], promptOpts: LivePromptOpts = {}) {
+    this.messages = [{ role: "system", text: buildLivePrompt(promptOpts) }];
+  }
+
+  /** Swap the system prompt (Study Tutor config arriving after session open). */
+  setPromptOpts(opts: LivePromptOpts) {
+    const sys = this.messages[0];
+    if (sys?.role === "system") sys.text = buildLivePrompt(opts);
+    else this.messages.unshift({ role: "system", text: buildLivePrompt(opts) });
   }
 
   /** Seed prior conversation (text only) after the system prompt — used on
