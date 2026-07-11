@@ -6,4 +6,6 @@ contextBridge.exposeInMainWorld('lunar', {
   pickImage: () => ipcRenderer.invoke('pick-image'),
   readImage: (filePath) => ipcRenderer.invoke('read-image', filePath)
   ,fetchAccurateModel: () => ipcRenderer.invoke('fetch-accurate-model')
+  ,pickModel: () => ipcRenderer.invoke('pick-model')
+  ,readModel: (filePath) => ipcRenderer.invoke('read-model', filePath)
 });

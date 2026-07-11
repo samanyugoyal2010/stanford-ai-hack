@@ -29,6 +29,8 @@ ipcMain.handle('ollama-scene', async (_, { prompt, image }) => {
   return JSON.parse(data.response);
 });
 ipcMain.handle('pick-image', async () => { const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] }); return result.canceled ? null : result.filePaths[0]; });
+ipcMain.handle('pick-model', async () => { const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: '3D models', extensions: ['glb', 'gltf', 'obj', 'stl'] }] }); return result.canceled ? null : result.filePaths[0]; });
+ipcMain.handle('read-model', async (_, filePath) => new Uint8Array(await fs.readFile(filePath)));
 ipcMain.handle('read-image', async (_, filePath) => (await fs.readFile(filePath)).toString('base64'));
 ipcMain.handle('fetch-accurate-model', async () => { const response = await fetch(accurateHeartURL); if (!response.ok) throw new Error(`Model source returned ${response.status}`); return new Uint8Array(await response.arrayBuffer()); });
 
