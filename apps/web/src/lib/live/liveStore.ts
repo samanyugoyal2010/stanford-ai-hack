@@ -3,7 +3,6 @@ import type { ModelProgress } from "./models";
 
 export type LivePhase = "off" | "connecting" | "loading" | "reconnecting" | "idle" | "listening" | "thinking" | "speaking";
 
-export type LiveSessionMode = "assistant" | "study_tutor";
 export type InterruptLevel = "quiet" | "balanced" | "active";
 /** Study Tutor UI status from proactive observe. */
 export type TutorStatus = "" | "watching" | "observing" | "quiet";
@@ -30,8 +29,7 @@ interface LiveState {
   agentCaptionMs: number; // playback duration of the current agent chunk — paces the word-by-word caption reveal
   toolStatus: string; // active tool name while a tool is running (""), drives the live "Searching the web…" cue
   warming: boolean;   // true from socket-open until the agent signals warm-ready → shows "Warming up…"
-  // Study Tutor lobby + in-call status
-  sessionMode: LiveSessionMode;
+  // Study lobby + in-call status
   studyGoal: string;
   interruptLevel: InterruptLevel;
   tutorStatus: TutorStatus;
@@ -65,7 +63,6 @@ export const useLiveStore = create<LiveState>((set) => ({
   agentCaptionMs: 0,
   toolStatus: "",
   warming: false,
-  sessionMode: "study_tutor",
   studyGoal: "",
   interruptLevel: "balanced",
   tutorStatus: "",

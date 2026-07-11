@@ -21,7 +21,7 @@ export interface VoiceEngineHandlers {
 }
 
 const PARTIAL_MS = 500;      // min gap between interim transcriptions
-const HOLD_MS = 4000;        // safety: never hold a mid-thought pause longer than this
+const HOLD_MS = 1500;        // safety: never hold a mid-thought pause longer than this
 const ONSET_GRACE_MS = 250;  // agent's own first syllable can't self-trigger barge-in
 const MIN_UTTER_SAMPLES = 16000 * 0.25; // ignore <0.25s blips
 const RMS_GATE = 0.006;      // reject near-silence; low enough to hear a soft talker
@@ -78,7 +78,7 @@ export class VoiceEngine {
       // catch premature ends — so we don't need a long silence buffer, and shaving it
       // takes real latency off every turn. ponytail: raise toward 700 if it starts
       // cutting slow talkers off mid-sentence.
-      redemptionMs: 550,
+      redemptionMs: 350,
       onSpeechStart: () => this.onSpeechStart(),
       onSpeechEnd: (audio) => { void this.onSpeechEnd(audio); },
       onFrameProcessed: (_p, frame) => this.onFrame(frame),

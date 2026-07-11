@@ -21,8 +21,8 @@ function abToBase64(ab: ArrayBuffer): string {
 // Orchestrates one live call. THICK CLIENT: the VoiceEngine runs VAD+STT+TTS
 // on-device; this hook wires it to the /live socket (final text + camera frames
 // + cancel), the camera, and the chat store, and owns a single leak-proof
-// teardown that every close path routes through. Study Tutor adds a proactive
-// screen-observe loop when sessionMode is study_tutor.
+// teardown that every close path routes through. Always runs a proactive
+// screen-observe loop for Study Tutor coaching.
 export function useLiveSession(chatId: string) {
   const set = useLiveStore((s) => s.set);
   const client = useRef<LiveClient | null>(null);
@@ -70,7 +70,7 @@ export function useLiveSession(chatId: string) {
     // tab's lifetime so reopening Live is instant (no re-download / shader recompile).
     client.current = null; engine.current = null; camRef.current = null; screenRef.current = null;
     // Keep `error` so the user sees why it ended; start() clears it next time.
-    // Keep lobby Study Tutor prefs (sessionMode / studyGoal / interruptLevel).
+    // Keep lobby prefs (studyGoal / interruptLevel).
     set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, cameraStream: null, screenStream: null, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", warming: false, tutorStatus: "" });
   }, [chatId, set]);
 
@@ -85,7 +85,6 @@ export function useLiveSession(chatId: string) {
   const tickObserve = useCallback(async () => {
     const st = useLiveStore.getState();
     if (tornDown.current || !client.current?.ready) return;
-    if (st.sessionMode !== "study_tutor") return;
     if (!st.screenOn && !st.cameraOn) return;
     // Don't peek while the student is talking / the tutor is mid-reply.
     if (st.phase === "listening" || st.phase === "thinking" || st.phase === "speaking") return;
@@ -103,7 +102,6 @@ export function useLiveSession(chatId: string) {
   const startObserveLoop = useCallback(() => {
     stopObserveLoop();
     const st = useLiveStore.getState();
-    if (st.sessionMode !== "study_tutor") return;
     const ms = observeIntervalMs(st.interruptLevel);
     // First peek after a short settle so screen share + warm-up can finish.
     setTimeout(() => { if (!tornDown.current) void tickObserve(); }, Math.min(ms, 2500));
@@ -195,11 +193,10 @@ export function useLiveSession(chatId: string) {
         onOpen: () => {
           const st = useLiveStore.getState();
           c.sessionConfig({
-            mode: st.sessionMode,
             studyGoal: st.studyGoal || undefined,
             interruptLevel: st.interruptLevel,
           });
-          set({ phase: "idle", error: undefined, warming: true, tutorStatus: st.sessionMode === "study_tutor" ? "watching" : "" });
+          set({ phase: "idle", error: undefined, warming: true, tutorStatus: "watching" });
           startObserveLoop();
         },
         onReconnecting: () => set({ phase: "reconnecting" }),
@@ -207,7 +204,7 @@ export function useLiveSession(chatId: string) {
         onError: (m) => set({ error: m }),
         onSse: (e) => {
           if (e.type === "error") { set({ error: e.message }); return; }
-          // Warm-up / Study Tutor status cues.
+          // Warm-up / tutor status cues.
           if (e.type === "status") {
             if (e.text === "ready" || e.text === "tutor_ready") set({ warming: false });
             if (e.text === "watching") set({ tutorStatus: "watching", warming: false });
@@ -268,7 +265,7 @@ export function useLiveSession(chatId: string) {
         // On the web build there's no bridge, so we answer instantly (no dead air).
         onToolBridge: async (reqId, op, arg) => {
           const api = (window as unknown as { openlive?: { bridge?: (op: string, arg?: string) => Promise<string> } }).openlive;
-          if (!api?.bridge) { client.current?.toolBridgeResult(reqId, "That's only available in the OpenLive desktop app."); return; }
+          if (!api?.bridge) { client.current?.toolBridgeResult(reqId, "That's only available in the Nudge desktop app."); return; }
           try { client.current?.toolBridgeResult(reqId, await api.bridge(op, arg)); }
           catch (e: any) { client.current?.toolBridgeResult(reqId, `Couldn't do that: ${String(e?.message ?? e)}`); }
         },
@@ -280,8 +277,8 @@ export function useLiveSession(chatId: string) {
       window.addEventListener("pagehide", onPageHide.current);
       await refreshDevices();
 
-      // Study Tutor works best with screen share — prompt immediately after connect.
-      if (useLiveStore.getState().sessionMode === "study_tutor" && !useLiveStore.getState().screenOn) {
+      // Prompt screen share immediately after connect (best for live tutoring).
+      if (!useLiveStore.getState().screenOn) {
         // Fire-and-forget; user can cancel the picker.
         void (async () => {
           await new Promise((r) => setTimeout(r, 400));

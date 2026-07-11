@@ -27,7 +27,7 @@ app.get("/health", (c) => c.json({ ok: true }));
 const port = Number(process.env.AGENT_PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port }) as unknown as Server;
 const wss = attachLiveWs(server); // live voice+vision on ws://…/live
-console.log(`▸ OpenLive agent service listening on http://localhost:${port}`);
+console.log(`▸ Nudge agent service listening on http://localhost:${port}`);
 
 server.on("error", (e: NodeJS.ErrnoException) => {
   if (e.code === "EADDRINUSE") console.error(`[agent] port ${port} is already in use — kill the old process or set AGENT_PORT.`);

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
-import type { SseEvent, MessageBlock, LiveServerMsg, InterruptLevel, LiveSessionMode } from "@openlive/shared";
+import type { SseEvent, MessageBlock, LiveServerMsg, InterruptLevel } from "@openlive/shared";
 import { LIVE_TAG, liveClientMsgSchema } from "@openlive/shared";
 import { createChat, addMessage, listMessages, renameChat } from "@openlive/db";
 import type { Message } from "@openlive/harness";
@@ -26,10 +26,6 @@ const INTERRUPT_PER_MIN: Record<InterruptLevel, number> = {
   active: 6,
 };
 
-const OBSERVE_PROMPT = `[PROACTIVE OBSERVE] The student did not speak. Look at their screen right now.
-If they are progressing, reading, or nothing useful to say, reply with exactly SILENCE and nothing else.
-Otherwise speak one short Socratic hint or question (one or two sentences). Prefer SILENCE over chatter.`;
-
 // Some providers (e.g. MiniMax) leak control-token fragments like "[e[" into the
 // text stream. Spoken replies never contain square brackets, so scrub them from
 // saved text blocks — the live client strips the same noise for display/TTS.
@@ -51,14 +47,6 @@ function truncateSpokenText(blocks: MessageBlock[], spoken: string): void {
   if (!placed && s) blocks.unshift({ type: "text", text: s });
 }
 
-function isSilenceReply(text: string): boolean {
-  const t = text.trim();
-  if (!t) return true;
-  if (/^SILENCE\b/i.test(t) && t.replace(/^SILENCE\b/i, "").trim().length === 0) return true;
-  if (/^SILENCE[.!]?\s*$/i.test(t)) return true;
-  return false;
-}
-
 // One live call — THIN. The browser runs the whole voice stack (VAD, STT, turn
 // detection, TTS) on-device; this server only receives the final user text + the
 // freshest camera frame, runs the LLM turn, streams reply text back, and PERSISTS
@@ -76,12 +64,16 @@ export class LiveSession {
   private lastFrame: Frame | null = null;  // freshest frame, for the `look` handshake
   private closed = false;
 
-  // Study Tutor session config (defaults = classic assistant).
-  private mode: LiveSessionMode = "assistant";
+  // Study session config.
   private studyGoal = "";
   private interruptLevel: InterruptLevel = "balanced";
   private lastSpokenInterventionAt = 0;
   private interventionTimes: number[] = [];
+  /** Latest one-line screen summary from vision observe — injected into talk turns. */
+  private lastScreenSummary = "";
+  /** When lastScreenSummary was last refreshed (ms). */
+  private lastScreenSummaryAt = 0;
+  private static SCREEN_CACHE_MS = 1500;
 
   // `look` tool ↔ client hi-res frame handshake.
   private lookPending: { reqId: string; resolve: (f: Frame | null) => void } | null = null;
@@ -93,14 +85,25 @@ export class LiveSession {
   constructor(private ws: WebSocket, private chatId: string) {
     const lookTool: TaktTool = {
       name: "look",
-      description: "Capture a fresh, higher-resolution frame from the user's camera and see it right now. Use when you need a closer or more current look at what the user is showing you. If the camera is off this returns nothing — then ask the user to turn it on.",
+      description: "Capture a fresh, higher-resolution frame from the user's camera/screen and see it right now. Use when you need a closer or more current look at what the user is showing you. If nothing is shared this returns nothing — then ask them to share their screen.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
       execute: async () => {
         if (!this.cameraOn && !this.screenOn) return { output: "Nothing is being shared right now. Ask the user to turn on their camera or share their screen." };
         const frame = await this.requestFrame();
         if (!frame) return { output: "Couldn't grab a fresh frame (it timed out). Ask the user to check their camera / screen share." };
-        const what = this.screenOn ? "the user's screen" : "the user's camera";
-        return { output: `This is what ${what} is showing right now — talk about it naturally, as what you're both looking at.`, images: [frame] };
+        const what = this.screenOn ? "screen" : "camera";
+        // Talk model is often text-only (gemma) — always return a vision text description.
+        const described = await this.runner.describeScreen(
+          [{ ...frame, source: this.screenOn ? "screen" : "camera" }],
+          "Look closely at what is on screen right now.",
+          AbortSignal.timeout(20_000),
+        );
+        if (described) {
+          this.lastScreenSummary = described;
+          this.lastScreenSummaryAt = Date.now();
+          return { output: `This is what the user's ${what} is showing right now — talk about it naturally:\n${described}` };
+        }
+        return { output: `Got a frame from the user's ${what}, but couldn't read it clearly. Ask them to zoom or scroll if needed.` };
       },
     };
     const clipboardRead: TaktTool = {
@@ -204,26 +207,23 @@ export class LiveSession {
   }
 
   private applySessionConfig(msg: {
-    mode?: LiveSessionMode;
     studyGoal?: string;
     interruptLevel?: InterruptLevel;
   }) {
-    this.mode = msg.mode ?? "assistant";
     this.studyGoal = msg.studyGoal?.trim() ?? "";
     this.interruptLevel = msg.interruptLevel ?? "balanced";
     this.runner.setPromptOpts({
-      mode: this.mode,
       studyGoal: this.studyGoal || undefined,
       interruptLevel: this.interruptLevel,
     });
-    if (this.mode === "study_tutor" && this.chatId && !this.titled) {
+    if (this.chatId && !this.titled) {
       this.titled = true;
       const title = this.studyGoal
         ? `Study: ${this.studyGoal.replace(/\s+/g, " ").trim().slice(0, 40)}`
-        : "Study Tutor";
+        : "Nudge";
       try { renameChat(this.chatId, title); } catch { /* */ }
     }
-    this.send({ t: "sse", event: { type: "status", text: this.mode === "study_tutor" ? "tutor_ready" : "ready" } });
+    this.send({ t: "sse", event: { type: "status", text: "ready" } });
   }
 
   private canIntervene(): boolean {
@@ -248,9 +248,9 @@ export class LiveSession {
     });
   }
 
-  // ── proactive Study Tutor observe ───────────────────────────────────────
+  // ── proactive screen observe ────────────────────────────────────────────
   private async runObserve(frames: TurnFrame[] = []) {
-    if (this.closed || this.mode !== "study_tutor") return;
+    if (this.closed) return;
     if (this.turnActive) return; // never interrupt a spoken turn
     if (!this.screenOn && !this.cameraOn && !frames.length) return;
     if (!this.canIntervene()) {
@@ -263,45 +263,38 @@ export class LiveSession {
     this.ac = ac;
     this.send({ t: "sse", event: { type: "status", text: "observing" } });
 
-    // Buffer spoken text so we can drop SILENCE without TTS.
-    let buffered = "";
     const blocks: MessageBlock[] = [];
     const baseEmit = this.blockEmit(blocks, ac.signal);
-    const emit: Emit = async (e) => {
-      if (e.type === "text_delta") { buffered += e.text; return; }
-      return baseEmit(e);
-    };
 
     try {
-      await this.runner.runTurn(OBSERVE_PROMPT, frames, emit, ac.signal);
-    } catch (e) {
-      if (!ac.signal.aborted) console.error("[live] observe:", e);
-    } finally {
-      const reply = buffered.trim().replace(/^["'`]+|["'`]+$/g, "");
-      const silent = isSilenceReply(reply);
-      if (!silent && !ac.signal.aborted) {
-        const spoken = reply.replace(/^SILENCE[,.:\s-]*/i, "").trim();
-        if (spoken) {
-          await baseEmit({ type: "text_delta", text: spoken });
-          this.lastSpokenInterventionAt = Date.now();
-          this.interventionTimes.push(this.lastSpokenInterventionAt);
-          scrubControlTokens(blocks);
-          // Ensure the spoken text is what we flush (buffer path may have empty text blocks).
-          if (!blocks.some((b) => b.type === "text" && (b as { text: string }).text.trim())) {
-            blocks.push({ type: "text", text: spoken });
-          }
-          if (this.chatId && blocks.length) {
-            try {
-              addMessage(this.chatId, "user", [{ type: "text", text: "[screen observe]" }], true);
-              addMessage(this.chatId, "assistant", blocks, true);
-            } catch { /* */ }
-          }
-        } else {
-          this.send({ t: "sse", event: { type: "status", text: "watching" } });
+      const result = await this.runner.runObserveVision(frames, ac.signal);
+      if (result.summary) {
+        this.lastScreenSummary = result.summary;
+        this.lastScreenSummaryAt = Date.now();
+      }
+
+      if (!result.silent && result.speak && !ac.signal.aborted) {
+        // Stream to TTS immediately (short hint — one delta is fine).
+        await baseEmit({ type: "text_delta", text: result.speak });
+        this.lastSpokenInterventionAt = Date.now();
+        this.interventionTimes.push(this.lastSpokenInterventionAt);
+        scrubControlTokens(blocks);
+        if (!blocks.some((b) => b.type === "text" && (b as { text: string }).text.trim())) {
+          blocks.push({ type: "text", text: result.speak });
+        }
+        if (this.chatId && blocks.length) {
+          try {
+            addMessage(this.chatId, "user", [{ type: "text", text: "[screen observe]" }], true);
+            addMessage(this.chatId, "assistant", blocks, true);
+          } catch { /* */ }
         }
       } else {
         this.send({ t: "sse", event: { type: "status", text: "watching" } });
       }
+    } catch (e) {
+      if (!ac.signal.aborted) console.error("[live] observe:", e);
+      this.send({ t: "sse", event: { type: "status", text: "watching" } });
+    } finally {
       this.send({ t: "sse", event: { type: "done" } });
       if (this.ac === ac) { this.ac = null; this.turnActive = false; }
       const q = this.queuedText; this.queuedText = null;
@@ -328,7 +321,20 @@ export class LiveSession {
       if (!this.titled) { this.titled = true; try { renameChat(this.chatId, text.replace(/\s+/g, " ").trim().slice(0, 48) || "Live conversation"); } catch { /* */ } }
     }
     try {
-      await this.runner.runTurn(text, frames, emit, ac.signal);
+      // Fresh eyes on user speech: describe the latest frames unless cache is hot.
+      const cacheFresh = this.lastScreenSummary
+        && (Date.now() - this.lastScreenSummaryAt) < LiveSession.SCREEN_CACHE_MS;
+      if (!cacheFresh && frames.length) {
+        const described = await this.runner.describeScreen(frames, text, ac.signal);
+        if (described) {
+          this.lastScreenSummary = described;
+          this.lastScreenSummaryAt = Date.now();
+        }
+      }
+      await this.runner.runTurn(text, [], emit, ac.signal, {
+        preferCachedContext: true,
+        screenSummary: this.lastScreenSummary,
+      });
     } catch (e) {
       if (!ac.signal.aborted) console.error("[live] turn:", e);
     } finally {

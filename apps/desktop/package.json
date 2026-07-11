@@ -2,8 +2,8 @@
   "name": "@openlive/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "OpenLive — live voice + vision AI assistant (desktop)",
-  "author": "OpenLive",
+  "description": "Nudge — the quiet tutor that teaches you to think (desktop)",
+  "author": "Nudge",
   "main": "main.cjs",
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",

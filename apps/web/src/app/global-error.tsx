@@ -11,7 +11,7 @@ export default function GlobalError({ error, reset }: { error: Error; reset: () 
         <div style={{ textAlign: "center", maxWidth: 420, padding: 24 }}>
           <h2 style={{ fontWeight: 600, marginBottom: 8 }}>Something went wrong</h2>
           <p style={{ color: "#a1a1aa", fontSize: 14, marginBottom: 20 }}>
-            OpenLive hit an unexpected error. You can reload without losing your saved settings or chats.
+            Nudge hit an unexpected error. You can reload without losing your saved settings or chats.
           </p>
           <button onClick={() => reset()} style={{ background: "#6366f1", color: "#fff", border: 0,
             borderRadius: 10, padding: "10px 18px", fontSize: 14, cursor: "pointer" }}>

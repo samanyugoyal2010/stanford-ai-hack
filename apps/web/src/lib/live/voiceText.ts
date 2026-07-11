@@ -5,16 +5,10 @@
 
 export const MIN_TTS_CHARS = 40; // don't hand Kokoro a tiny fragment — short
                                  // snippets render with an unstable timbre.
-export const FIRST_TTS_CHARS = 24; // but the FIRST chunk of a reply speaks at a
-                                   // lower bar (a clause boundary, or the opening
-                                   // few words of a long sentence) so the agent
-                                   // starts talking WHILE the rest still streams,
-                                   // not after the whole reply is generated. Kept
-                                   // ≥24 (not tiny): Kokoro renders a very short
-                                   // opening fragment with a NOTICEABLY different
-                                   // timbre — the "voice suddenly changes" bug —
-                                   // so the opening chunk needs enough text to be
-                                   // stable while still starting sub-sentence.
+export const FIRST_TTS_CHARS = 28; // first chunk still starts early, but stays
+                                   // close to MIN so opening/later chunks share
+                                   // pace/timbre. Tiny openings (~16) caused
+                                   // noticeable rate flips across chunks.
 
 // Whisper hallucinates these on silence/ambient noise — never treat as a turn.
 // Kept tight: only true silence artifacts. Real short answers ("okay", "yeah",
@@ -63,10 +57,8 @@ export function stripMarkdown(s: string): string {
 // Completed sentences shorter than MIN_TTS_CHARS are held and merged with the
 // next one before emitting — so Kokoro always gets enough text to keep a single,
 // consistent voice instead of re-rendering tiny fragments oddly. EXCEPTION: the
-// FIRST chunk of a reply is released fast (a clause boundary, or the opening few
-// words of a long sentence) so speech begins as text streams, not after the
-// whole reply is generated — the difference between "talks as it thinks" and a
-// long silence then a wall of speech.
+// FIRST chunk of a reply is released early on a clause boundary so speech begins
+// as text streams, without mid-sentence word chops that flip rate/timbre.
 export class SentenceChunker {
   private buf = "";      // text after the last completed sentence
   private ready = "";    // completed sentences not yet long enough to speak
@@ -93,21 +85,23 @@ export class SentenceChunker {
     if (last) this.buf = this.buf.slice(last);
     return out;
   }
-  // Release the opening of a reply as soon as there's something natural to say:
-  // an early clause boundary, else — for a LONG opening sentence with no early
-  // pause — the first few words at a word boundary. A short sentence (terminal
-  // within reach) is left for the sentence loop to emit whole.
+  // Release the opening of a reply only on a natural clause boundary (comma,
+  // semicolon, em/en dash). Take text from the start through the first such
+  // boundary that already clears FIRST_TTS_CHARS — never a mid-sentence word chop.
   private takeFirst(): string | null {
     const s = this.buf;
     if (s.trim().length < FIRST_TTS_CHARS) return null;
-    const clause = /^([\s\S]{12,}?[,;:—–])\s/.exec(s);
-    if (clause) { this.buf = s.slice(clause[0].length); return clause[1]!.trim(); }
-    if (/[.!?](\s|$)/.test(s.slice(0, 90))) return null; // a full sentence ends soon — don't chop it
-    const window = s.slice(0, 48);
-    const sp = window.lastIndexOf(" ");
-    if (sp < FIRST_TTS_CHARS) return null;
-    this.buf = s.slice(sp + 1);
-    return window.slice(0, sp).trim();
+    const re = /[,;:—–]\s/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s))) {
+      const end = m.index + 1; // include the punctuation, exclude trailing space
+      const clause = s.slice(0, end).trim();
+      if (clause.length >= FIRST_TTS_CHARS) {
+        this.buf = s.slice(m.index + m[0].length);
+        return clause;
+      }
+    }
+    return null; // wait for a full sentence via the sentence loop
   }
   // flush() ends the turn (called on `done` and on barge-in) — reset `started`
   // so the next reply gets its own fast first chunk.

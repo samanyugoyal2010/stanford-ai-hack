@@ -10,11 +10,11 @@ import { api } from "@/lib/api";
 import { chatStore } from "@/lib/chatStore";
 import { PreCall } from "./LiveStage";
 import { InCall } from "./InCall";
-import { MiniBar } from "./MiniBar";
+import { MiniSphere } from "./MiniSphere";
 
 // Hosts one live call: a centered setup MODAL before the call (permissions,
 // mic/camera, model download, model pick), then the full-screen in-call view
-// (orb + transcript) once active.
+// (orb + transcript) once active — or a tiny floating sphere while minimized.
 export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => void }) {
   const { start, stop, download, toggleMute, toggleCamera, toggleScreen, getLevels, getBands, refreshDevices, setMic, setCam } = useLiveSession(chatId);
   const { active, phase, modelsDownloaded, downloading, downloadPct, downloadLoaded, downloadTotal, downloadModels, muted, cameraOn, screenOn, cameraStream, screenStream, error, mics, cams, micId, camId } = useLiveStore();
@@ -26,6 +26,14 @@ export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => voi
   // Preload a resumed conversation's transcript from the saved store.
   useEffect(() => { api.messages(chatId).then((m) => chatStore.preload(chatId, m as never)).catch(() => {}); }, [chatId]);
   useEffect(() => () => stop(), [stop]);
+
+  // After a call starts, collapse to the floating sphere once (not on every expand).
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => setMinimized(true), 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only auto-collapse when the call becomes active
+  }, [active, setMinimized]);
 
   const end = () => { setMinimized(false); stop(); onExit(); };
 
@@ -43,7 +51,7 @@ export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => voi
               <div className="flex justify-end p-2">
                 <button onClick={end} title="Close" aria-label="Close live" className="grid size-8 place-items-center rounded-full text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground"><X className="size-4" /></button>
               </div>
-              <PreCall mics={mics} cams={cams} micId={micId} camId={camId} onMic={(id) => void setMic(id)} onCam={setCam}
+              <PreCall mics={mics} micId={micId} onMic={(id) => void setMic(id)}
                 error={error} modelsDownloaded={modelsDownloaded} downloading={downloading} downloadPct={downloadPct}
                 downloadLoaded={downloadLoaded} downloadTotal={downloadTotal} downloadModels={downloadModels}
                 refreshDevices={refreshDevices} onDownload={() => void download()} onStart={() => void start()}
@@ -54,10 +62,7 @@ export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => voi
       </AnimatePresence>
 
       {active && minimized && (
-        <MiniBar phase={phase} muted={muted} cameraOn={cameraOn} screenOn={screenOn}
-          cameraStream={cameraStream} screenStream={screenStream}
-          toggleMute={toggleMute} toggleCamera={toggleCamera} toggleScreen={toggleScreen}
-          getLevels={getLevels} getBands={getBands} onEnd={end} />
+        <MiniSphere phase={phase} getLevels={getLevels} getBands={getBands} />
       )}
       {active && !minimized && (
         <InCall chatId={chatId} phase={phase} muted={muted} cameraOn={cameraOn} screenOn={screenOn}

@@ -2,7 +2,7 @@
 // Guards the non-trivial voice string logic — chunk merging (voice stability),
 // junk filtering (turn detection), and TTS scrubbing.
 import assert from "node:assert";
-import { isJunk, endsMidThought, stripMarkdown, SentenceChunker, MIN_TTS_CHARS } from "./voiceText.ts";
+import { isJunk, endsMidThought, stripMarkdown, SentenceChunker, MIN_TTS_CHARS, FIRST_TTS_CHARS } from "./voiceText.ts";
 
 // isJunk: silence artifacts dropped, real short answers kept.
 assert.equal(isJunk("thank you for watching"), true);
@@ -56,38 +56,38 @@ assert.equal(stripMarkdown("Yeah, I'm here.[e[ [e["), "Yeah, I'm here.");
 {
   // Fast start: a long first sentence releases its opening clause BEFORE the
   // terminal period, streamed in small deltas — the agent talks while the rest
-  // still arrives. (Old behavior held everything until the sentence completed.)
+  // still arrives. Clause must clear FIRST_TTS_CHARS so pace matches later chunks.
   const c = new SentenceChunker();
   const spoken: string[] = [];
-  for (const d of ["The gas valve", ", which sits", " on the lower left, ", "controls the flow."]) spoken.push(...c.push(d));
+  for (const d of ["Looking at the gas valve", ", which sits", " on the lower left, ", "controls the flow."]) spoken.push(...c.push(d));
   assert.ok(spoken.length >= 1, "should emit before flush");
-  assert.equal(spoken[0], "The gas valve,");       // opening clause released early
-  assert.ok(spoken[0]!.length < MIN_TTS_CHARS);    // small enough to start fast
+  assert.equal(spoken[0], "Looking at the gas valve, which sits on the lower left,");
+  assert.ok(spoken[0]!.length >= FIRST_TTS_CHARS);
 }
 {
-  // A single short sentence with no clause boundary still speaks on completion
-  // (first-chunk bar), not held until flush like it used to be — and is emitted
-  // WHOLE, not chopped at a word boundary (a terminal is within reach).
+  // A single sentence with no clause boundary still speaks on completion
+  // (first-chunk bar), not held until flush — and is emitted WHOLE.
   const c = new SentenceChunker();
-  const out = c.push("The valve is on the left. ");
+  const out = c.push("The gas valve is on the left side. ");
   assert.equal(out.length, 1);
-  assert.equal(out[0], "The valve is on the left.");
+  assert.equal(out[0], "The gas valve is on the left side.");
+  assert.ok(out[0]!.length >= FIRST_TTS_CHARS);
 }
 {
-  // A LONG opening sentence with no early pause: release the first few words now
-  // so audio starts, instead of waiting for the whole sentence (the bug the user
-  // hit — "Sure — I'll put a simple labeled diagram of the … parts.").
+  // A LONG opening sentence with no early clause boundary: do NOT chop mid-word
+  // for a tiny first chunk (that flipped rate/timbre). Wait for the sentence end.
   const c = new SentenceChunker();
   const spoken: string[] = [];
   for (const d of ["I'll put ", "a simple labeled ", "diagram of the machine ", "on screen for you now."]) spoken.push(...c.push(d));
-  assert.ok(spoken.length >= 2, "long sentence should stream in pieces, not one late chunk");
-  assert.ok(spoken[0]!.length < 48 && !/[.!?]$/.test(spoken[0]!), "first chunk is the opening words, mid-sentence");
+  assert.equal(spoken.length, 1, "no mid-sentence word chop — whole sentence when complete");
+  assert.ok(/now\.$/.test(spoken[0]!), "first emit is the completed sentence");
+  assert.ok(spoken[0]!.length >= FIRST_TTS_CHARS);
 }
 {
   // After the first chunk, later short sentences hold to the stable MIN bar.
   const c = new SentenceChunker();
-  c.push("Okay, here we go. ");                    // first chunk released
-  const out = c.push("Yes. ");                     // 4 chars, under MIN → held
+  c.push("Okay, here we go with the next step. "); // first chunk released
+  const out = c.push("Yes. ");                     // under MIN → held
   assert.equal(out.length, 0);
 }
 

@@ -92,14 +92,14 @@ export function TopBar() {
       <div className="flex items-center gap-1">
         <div className="flex items-center gap-2 pr-3">
           <OpenLiveOrb size={26} />
-          <span className="text-[14px] font-semibold tracking-tight">OpenLive</span>
+          <span className="text-[14px] font-semibold tracking-tight">nudge</span>
         </div>
         <Conversations />
       </div>
       <div className={cn("flex items-center gap-1", noDrag)}>
         <button onClick={openSettings} title="Settings" aria-label="Settings"
           className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground"><Settings2 className="size-4" /></button>
-        <button onClick={() => setMinimized(true)} title="Minimize to floating bar" aria-label="Minimize"
+        <button onClick={() => setMinimized(true)} title="Back to floating sphere" aria-label="Minimize"
           className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-foreground/10 hover:text-foreground"><Minimize2 className="size-4" /></button>
       </div>
     </header>

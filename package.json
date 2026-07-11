@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OpenLive fork — Study Tutor with local Ollama vision",
+  "description": "Nudge — the quiet tutor that teaches you to think (local Ollama)",
   "packageManager": "pnpm@11.5.2",
   "engines": {
     "node": ">=22.13"
