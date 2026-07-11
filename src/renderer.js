@@ -3,6 +3,10 @@ import { GLTFLoader } from '../node_modules/three/examples/jsm/loaders/GLTFLoade
 
 const $ = (id) => document.getElementById(id); const messages = $('messages'); let imageBase64 = null; let recognition = null; const referenceImage = document.createElement('img'); referenceImage.alt = 'Uploaded diagram reference'; referenceImage.id = 'reference-image'; $('viewport').prepend(referenceImage);
 const accurateButton = document.createElement('button'); accurateButton.className = 'outline'; accurateButton.textContent = '⌁ Find accurate model'; $('upload').before(accurateButton); const localModelButton = document.createElement('button'); localModelButton.className = 'outline'; localModelButton.textContent = '＋ Open 3D model'; $('upload').before(localModelButton);
+const qualitySelect = document.createElement('select'); qualitySelect.className = 'quality-select'; qualitySelect.innerHTML = '<option value="preview">Preview</option><option value="standard">Standard</option><option value="professional">Professional</option><option value="hero">Hero asset</option>'; $('upload').before(qualitySelect);
+const referenceButton = document.createElement('button'); referenceButton.className = 'outline'; referenceButton.textContent = '＋ References'; $('upload').before(referenceButton); let referencePaths = [];
+referenceButton.addEventListener('click', async () => { referencePaths = await window.lunar.chooseReferences(); referenceButton.textContent = referencePaths.length ? `＋ ${referencePaths.length} references` : '＋ References'; });
+window.lunar.blenderStatus().then((status) => { if (!status.available && qualitySelect.value !== 'preview') qualitySelect.title = 'Blender is required for this quality mode'; });
 function addMessage(role, text) { const el = document.createElement('div'); el.className = `message ${role}`; el.innerHTML = `<div class="avatar">${role === 'user' ? '●' : '✦'}</div><p>${text.replaceAll('<', '&lt;')}</p>`; messages.append(el); messages.scrollTop = messages.scrollHeight; }
 addMessage('assistant', 'I’m Lunar. Ask me anything, or upload a diagram and I’ll turn its structure into a rough 3D scene.');
 
@@ -10,6 +14,7 @@ async function checkStatus() { const state = await window.lunar.status(); $('sta
 checkStatus();
 async function createScene(prompt, image = null) {
   $('generate').disabled = true;
+  if (qualitySelect.value !== 'preview') { try { await window.lunar.runBlenderPipeline({ quality_mode: qualitySelect.value, references: referencePaths, prompt }); } catch (error) { addMessage('system', `${qualitySelect.value} mode requires the Blender backend: ${error.message}`); $('generate').disabled = false; return; } }
   try {
     const spec = await window.lunar.scene({ image, prompt: `${prompt}\n\nCreate an approximate 3D model for the workspace. Return an object with an objects array. Each object needs name, primitive (box, sphere, cylinder, plane), position [x,y,z], scale [x,y,z], and color hex.` });
     if (/heart|cardiac|atrium|ventricle|valve/i.test(prompt)) await loadAccurateModel(); else if (/airplane|aircraft|plane|jet/i.test(prompt)) renderAirplaneScene(); else renderScene(normalizeScene(spec));

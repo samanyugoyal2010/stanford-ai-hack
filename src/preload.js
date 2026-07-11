@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('lunar', {
   ,fetchAccurateModel: () => ipcRenderer.invoke('fetch-accurate-model')
   ,pickModel: () => ipcRenderer.invoke('pick-model')
   ,readModel: (filePath) => ipcRenderer.invoke('read-model', filePath)
+  ,blenderStatus: () => ipcRenderer.invoke('blender-status')
+  ,chooseReferences: () => ipcRenderer.invoke('choose-references')
+  ,runBlenderPipeline: (payload) => ipcRenderer.invoke('run-blender-pipeline', payload)
 });
