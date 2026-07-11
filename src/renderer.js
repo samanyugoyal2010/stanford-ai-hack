@@ -12,7 +12,7 @@ async function createScene(prompt, image = null) {
   $('generate').disabled = true;
   try {
     const spec = await window.lunar.scene({ image, prompt: `${prompt}\n\nCreate an approximate 3D model for the workspace. Return an object with an objects array. Each object needs name, primitive (box, sphere, cylinder, plane), position [x,y,z], scale [x,y,z], and color hex.` });
-    if (/heart|cardiac|atrium|ventricle|valve/i.test(prompt)) await loadAccurateModel(); else renderScene(normalizeScene(spec));
+    if (/heart|cardiac|atrium|ventricle|valve/i.test(prompt)) await loadAccurateModel(); else if (/airplane|aircraft|plane|jet/i.test(prompt)) renderAirplaneScene(); else renderScene(normalizeScene(spec));
     addMessage('assistant', 'I created an editable 3D draft in the scene workspace. Drag the preview to orbit it.');
   } catch (error) { addMessage('system', 'I could not create the 3D draft. Try uploading the diagram as an image or ask for a simpler diagram.'); }
   $('generate').disabled = !imageBase64;
@@ -31,7 +31,7 @@ async function loadAccurateModel() { accurateButton.disabled = true; accurateBut
 function normalizeScene(spec) { const objects = Array.isArray(spec) ? spec : spec.objects || spec.components || spec.parts || []; return { objects: objects.map((item, index) => ({ name: item.name || `Part ${index + 1}`, primitive: item.primitive || item.type || 'box', position: item.position || [0, index * 0.8, 0], scale: item.scale || [1, 1, 1], color: item.color || ['#e8a878', '#6d9dc5', '#9dc27c', '#c88ed4'][index % 4] })) }; }
 function renderHeartScene() {
   group.clear();
-  const shape = new THREE.Shape(); shape.moveTo(0, -1.1); shape.bezierCurveTo(-2.3, .35, -1.45, 1.65, -.65, 1.55); shape.bezierCurveTo(-.2, 1.5, 0, 1.18, 0, 1.02); shape.bezierCurveTo(0, 1.18, .2, 1.5, .65, 1.55); shape.bezierCurveTo(1.45, 1.65, 2.3, .35, 0, -1.1);
+  const shape = new THREE.Shape(); shape.moveTo(0, -1.45); shape.bezierCurveTo(-1.15, -1.15, -1.8, -.35, -1.72, .62); shape.bezierCurveTo(-1.66, 1.28, -1.18, 1.75, -.55, 1.7); shape.bezierCurveTo(-.18, 1.67, .05, 1.48, .18, 1.22); shape.bezierCurveTo(.34, 1.5, .62, 1.7, .96, 1.55); shape.bezierCurveTo(1.52, 1.3, 1.7, .48, 1.5, -.3); shape.bezierCurveTo(1.28, -1.02, .68, -1.3, 0, -1.45);
   const heartMaterial = new THREE.MeshPhysicalMaterial({ color: '#9f3445', roughness: .28, metalness: .02, clearcoat: .45, clearcoatRoughness: .2, transparent: true, opacity: .34, depthWrite: false, side: THREE.DoubleSide });
   const heart = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 1.05, bevelEnabled: true, bevelSegments: 8, curveSegments: 16, bevelSize: .16, bevelThickness: .16 }), heartMaterial); heart.scale.set(.88, 1.06, 1); heart.rotation.x = -.08; heart.rotation.y = -.16; group.add(heart);
   const chamber = (x, y, z, color, scale) => { const node = new THREE.Mesh(new THREE.SphereGeometry(.32, 32, 24), new THREE.MeshPhysicalMaterial({ color, roughness: .3, clearcoat: .35 })); node.position.set(x, y, z); node.scale.set(...scale); group.add(node); };
@@ -43,6 +43,19 @@ function renderHeartScene() {
   tube([[.15, 2.28, .12], [.45, 2.53, .12], [.83, 2.52, .12]], .13, '#cf6860'); tube([[.32, 2.35, .12], [.75, 2.76, .12], [1.1, 2.72, .12]], .11, '#cf6860'); tube([[.5, 2.38, .12], [.95, 2.95, .12], [1.18, 2.96, .12]], .1, '#cf6860');
   const valveMaterial = new THREE.MeshPhysicalMaterial({ color: '#e8b66b', roughness: .25, clearcoat: .4 }); const valve = new THREE.Mesh(new THREE.TorusGeometry(.17, .06, 16, 32), valveMaterial); valve.position.set(-.43, -.04, 1.42); valve.rotation.x = Math.PI / 2; group.add(valve); const valve2 = valve.clone(); valve2.position.x = .43; group.add(valve2);
   group.scale.set(.82, .82, .82); group.position.y = -.25;
+}
+
+function renderAirplaneScene() {
+  group.clear();
+  const metal = new THREE.MeshPhysicalMaterial({ color: '#d8e1eb', roughness: .24, metalness: .18, clearcoat: .5 }); const dark = new THREE.MeshPhysicalMaterial({ color: '#26384e', roughness: .25, metalness: .3 }); const blue = new THREE.MeshPhysicalMaterial({ color: '#477da8', roughness: .28, metalness: .15 });
+  const add = (geometry, material, position, rotation = [0, 0, 0], scale = [1, 1, 1]) => { const node = new THREE.Mesh(geometry, material); node.position.set(...position); node.rotation.set(...rotation); node.scale.set(...scale); group.add(node); return node; };
+  add(new THREE.CylinderGeometry(.46, .52, 4.8, 32), metal, [0, 0, 0], [0, 0, Math.PI / 2]);
+  add(new THREE.ConeGeometry(.46, 1.15, 32), metal, [2.95, 0, 0], [0, 0, -Math.PI / 2]); add(new THREE.SphereGeometry(.48, 32, 20), metal, [-2.3, 0, 0], [0, 0, 0], [1.2, .95, .95]);
+  add(new THREE.BoxGeometry(3.2, .12, 7.4), blue, [.15, -.05, 0], [0, 0, 0], [1, 1, .72]); add(new THREE.BoxGeometry(1.6, .1, 3.2), blue, [-1.7, .72, 0], [0, 0, 0], [1, 1, .55]);
+  add(new THREE.BoxGeometry(1.2, .12, 2.4), metal, [-1.82, .72, 0], [0, 0, 0], [1, 1, .45]);
+  for (const z of [-1.62, 1.62]) { add(new THREE.CylinderGeometry(.3, .34, 1.15, 24), dark, [.25, -.52, z], [Math.PI / 2, 0, 0]); add(new THREE.TorusGeometry(.3, .07, 12, 24), metal, [.25, -.52, z], [Math.PI / 2, 0, 0]); }
+  for (let i = -2; i <= 2; i++) add(new THREE.BoxGeometry(.16, .12, .32), dark, [1.9 - i * .5, .43, -.48], [0, 0, 0]);
+  group.rotation.y = -.25; group.rotation.x = .08; group.scale.setScalar(.72); group.position.y = -.15;
 }
 function renderScene(spec) { group.clear(); normalizeScene(spec).objects.forEach((item) => { const geometry = item.primitive === 'sphere' ? new THREE.SphereGeometry(.65, 32, 20) : item.primitive === 'cylinder' ? new THREE.CylinderGeometry(.55, .55, 1.2, 32) : item.primitive === 'plane' ? new THREE.PlaneGeometry(1, 1) : new THREE.BoxGeometry(1, 1, 1); const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: item.color || '#e8a878', roughness: .55 })); mesh.position.set(...(item.position || [0, 0, 0])); mesh.scale.set(...(item.scale || [1, 1, 1])); group.add(mesh); }); }
 renderScene({ objects: [{ primitive: 'box', position: [0, 0, 0], scale: [2.2, .7, 1.4], color: '#e8a878' }, { primitive: 'cylinder', position: [0, -1, 0], scale: [.5, 1, .5], color: '#6d9dc5' }] });
