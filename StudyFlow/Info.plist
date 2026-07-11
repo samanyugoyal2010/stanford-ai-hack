@@ -30,5 +30,8 @@
 	<!-- Speech recognition for converting student audio into transcripts. -->
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>StudyFlow converts your speech into text to understand what you are studying and guide you without giving away answers.</string>
+	<!-- Screen Recording for ScreenCaptureKit observation of study material. -->
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>StudyFlow observes your study screen (via Screen Recording) so it can understand what you are working on and coach you without giving away answers.</string>
 </dict>
 </plist>

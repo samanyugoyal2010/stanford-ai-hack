@@ -65,7 +65,14 @@ final class ObservationSessionCoordinator {
         }
     }
 
-    func stopSession() async throws -> LearnerProfileSnapshot? {
+    /// Latest non-empty OCR excerpt for live tutoring context.
+    var latestScreenText: String {
+        recentOCRExcerpts.last ?? ""
+    }
+
+    /// Stops capture/OCR. When `extractProfile` is true (Learner Profile), flushes EverOS and runs hybrid refine.
+    /// Dashboard voice sessions pass `false` to avoid a slow Gemma refine on Stop.
+    func stopSession(extractProfile: Bool = true) async throws -> LearnerProfileSnapshot? {
         isRunning = false
         loopTask?.cancel()
         loopTask = nil
@@ -79,8 +86,14 @@ final class ObservationSessionCoordinator {
         let sampleCount = samplesSent
 
         do {
-            log.info("Observe", "Stopping · flushing EverOS · samples=\(sampleCount)")
+            log.info("Observe", "Stopping · flushing EverOS · samples=\(sampleCount) · extract=\(extractProfile)")
             try await remoteMemory.flush(userId: userId, sessionId: sid)
+
+            guard extractProfile else {
+                log.info("Observe", "Soft stop complete · skipped hybrid refine")
+                return lastProfile
+            }
+
             try await Task.sleep(nanoseconds: 1_500_000_000)
 
             var base: LearnerProfileSnapshot?

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000044 /* Assets.xcassets */; };
 		A10000000000000000000048 /* EverOSClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* EverOSClient.swift */; };
 		A10000000000000000000049 /* EverOSCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* EverOSCredentialStore.swift */; };
 		A1000000000000000000004A /* EverOSMemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* EverOSMemoryService.swift */; };
@@ -59,8 +60,9 @@
 		A10000000000000000000079 /* LearnerProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000041 /* LearnerProfileView.swift */; };
 		A1000000000000000000007A /* StatusCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000042 /* StatusCardView.swift */; };
 		A1000000000000000000007B /* OCRProcessingPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000043 /* OCRProcessingPipeline.swift */; };
-		A10000000000000000000045 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000044 /* Assets.xcassets */; };
 		A10000000000000000BEEF02 /* PipelineActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF01 /* PipelineActivityLog.swift */; };
+		A10000000000000000BEEF03 /* SocraticPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF05 /* SocraticPrompt.swift */; };
+		A10000000000000000BEEF04 /* VoiceAgentCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF06 /* VoiceAgentCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -121,6 +123,8 @@
 		A10000000000000000000046 /* StudyFlow.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StudyFlow.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000047 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000BEEF01 /* PipelineActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineActivityLog.swift; sourceTree = "<group>"; };
+		A10000000000000000BEEF05 /* SocraticPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocraticPrompt.swift; sourceTree = "<group>"; };
+		A10000000000000000BEEF06 /* VoiceAgentCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAgentCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -171,18 +175,6 @@
 			path = StudyFlow;
 			sourceTree = "<group>";
 		};
-		A10000000000000000000082 /* AI */ = {
-			isa = PBXGroup;
-			children = (
-				A10000000000000000000088 /* EverOS */,
-				A10000000000000000000015 /* GemmaService.swift */,
-				A10000000000000000000016 /* LearnerProfileSynthesizer.swift */,
-				A10000000000000000000017 /* OllamaClient.swift */,
-				A10000000000000000000018 /* ProfileSynthesisPrompt.swift */,
-			);
-			path = AI;
-			sourceTree = "<group>";
-		};
 		A1000000000000000000007C /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -193,39 +185,23 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		A10000000000000000000083 /* Audio */ = {
+		A1000000000000000000007D /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				A1000000000000000000001C /* AudioCaptureConfigurator.swift */,
+				A10000000000000000000040 /* DashboardView.swift */,
+				A10000000000000000000041 /* LearnerProfileView.swift */,
+				A10000000000000000000042 /* StatusCardView.swift */,
 			);
-			path = Audio;
+			path = Views;
 			sourceTree = "<group>";
 		};
-		A10000000000000000000085 /* Database */ = {
+		A1000000000000000000007E /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
-				A1000000000000000000001D /* DatabaseProviding.swift */,
-				A1000000000000000000001E /* SQLiteStore.swift */,
+				A1000000000000000000003E /* DashboardViewModel.swift */,
+				A1000000000000000000003F /* LearnerProfileViewModel.swift */,
 			);
-			path = Database;
-			sourceTree = "<group>";
-		};
-		A10000000000000000000081 /* Managers */ = {
-			isa = PBXGroup;
-			children = (
-				A1000000000000000000001F /* BehaviorAnalysisEngine.swift */,
-				A10000000000000000000020 /* ContextBuilder.swift */,
-				A10000000000000000000021 /* HybridProfilePipeline.swift */,
-				A10000000000000000000022 /* ManualProfileIngestor.swift */,
-				A10000000000000000000023 /* MemoryManager.swift */,
-				A10000000000000000000024 /* ObservationMessageBuilder.swift */,
-				A10000000000000000000025 /* ObservationSessionCoordinator.swift */,
-				A10000000000000000000026 /* ScreenCaptureManager.swift */,
-				A10000000000000000000027 /* SpeechRecognitionManager.swift */,
-				A10000000000000000000028 /* VisionOCRManager.swift */,
-				A10000000000000000000029 /* VoiceOutputManager.swift */,
-			);
-			path = Managers;
+			path = ViewModels;
 			sourceTree = "<group>";
 		};
 		A1000000000000000000007F /* Models */ = {
@@ -244,20 +220,69 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
-		A10000000000000000000087 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				A10000000000000000000044 /* Assets.xcassets */,
-			);
-			path = Resources;
-			sourceTree = "<group>";
-		};
 		A10000000000000000000080 /* Services */ = {
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000089 /* Protocols */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000081 /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000001F /* BehaviorAnalysisEngine.swift */,
+				A10000000000000000000020 /* ContextBuilder.swift */,
+				A10000000000000000000021 /* HybridProfilePipeline.swift */,
+				A10000000000000000000022 /* ManualProfileIngestor.swift */,
+				A10000000000000000000023 /* MemoryManager.swift */,
+				A10000000000000000000024 /* ObservationMessageBuilder.swift */,
+				A10000000000000000000025 /* ObservationSessionCoordinator.swift */,
+				A10000000000000000000026 /* ScreenCaptureManager.swift */,
+				A10000000000000000000027 /* SpeechRecognitionManager.swift */,
+				A10000000000000000000028 /* VisionOCRManager.swift */,
+				A10000000000000000BEEF06 /* VoiceAgentCoordinator.swift */,
+				A10000000000000000000029 /* VoiceOutputManager.swift */,
+			);
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000082 /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000088 /* EverOS */,
+				A10000000000000000000015 /* GemmaService.swift */,
+				A10000000000000000000016 /* LearnerProfileSynthesizer.swift */,
+				A10000000000000000000017 /* OllamaClient.swift */,
+				A10000000000000000000018 /* ProfileSynthesisPrompt.swift */,
+				A10000000000000000BEEF05 /* SocraticPrompt.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000083 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000001C /* AudioCaptureConfigurator.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000084 /* Vision */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000043 /* OCRProcessingPipeline.swift */,
+			);
+			path = Vision;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000085 /* Database */ = {
+			isa = PBXGroup;
+			children = (
+				A1000000000000000000001D /* DatabaseProviding.swift */,
+				A1000000000000000000001E /* SQLiteStore.swift */,
+			);
+			path = Database;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000086 /* Utilities */ = {
@@ -270,31 +295,12 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
-		A1000000000000000000007E /* ViewModels */ = {
+		A10000000000000000000087 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				A1000000000000000000003E /* DashboardViewModel.swift */,
-				A1000000000000000000003F /* LearnerProfileViewModel.swift */,
+				A10000000000000000000044 /* Assets.xcassets */,
 			);
-			path = ViewModels;
-			sourceTree = "<group>";
-		};
-		A1000000000000000000007D /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				A10000000000000000000040 /* DashboardView.swift */,
-				A10000000000000000000041 /* LearnerProfileView.swift */,
-				A10000000000000000000042 /* StatusCardView.swift */,
-			);
-			path = Views;
-			sourceTree = "<group>";
-		};
-		A10000000000000000000084 /* Vision */ = {
-			isa = PBXGroup;
-			children = (
-				A10000000000000000000043 /* OCRProcessingPipeline.swift */,
-			);
-			path = Vision;
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		A10000000000000000000088 /* EverOS */ = {
@@ -437,6 +443,7 @@
 				A1000000000000000000005E /* ScreenCaptureManager.swift in Sources */,
 				A10000000000000000000070 /* ScreenCapturing.swift in Sources */,
 				A10000000000000000000068 /* ServiceStatus.swift in Sources */,
+				A10000000000000000BEEF03 /* SocraticPrompt.swift in Sources */,
 				A1000000000000000000005F /* SpeechRecognitionManager.swift in Sources */,
 				A10000000000000000000071 /* SpeechRecognizing.swift in Sources */,
 				A10000000000000000000069 /* SpeechTranscript.swift in Sources */,
@@ -445,6 +452,7 @@
 				A10000000000000000000053 /* StudyFlowApp.swift in Sources */,
 				A10000000000000000000060 /* VisionOCRManager.swift in Sources */,
 				A10000000000000000000072 /* VisionOCRProviding.swift in Sources */,
+				A10000000000000000BEEF04 /* VoiceAgentCoordinator.swift in Sources */,
 				A10000000000000000000061 /* VoiceOutputManager.swift in Sources */,
 				A10000000000000000000073 /* VoiceSpeaking.swift in Sources */,
 			);
@@ -461,14 +469,16 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				ONLY_ACTIVE_ARCH = YES;
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				SDKROOT = macosx;
 			};
 			name = Debug;
 		};
@@ -480,9 +490,11 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				SWIFT_COMPILATION_MODE = wholemodule;
+				ENABLE_HARDENED_RUNTIME = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
 		};
@@ -492,10 +504,23 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = StudyFlow/StudyFlow.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = C7Z6L3KT92;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StudyFlow/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -518,10 +543,23 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = StudyFlow/StudyFlow.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = C7Z6L3KT92;
+				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = YES;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StudyFlow/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

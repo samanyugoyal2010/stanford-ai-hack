@@ -30,6 +30,7 @@ final class AppDependencyContainer {
     let hybridPipeline: HybridProfilePipeline
     let observationCoordinator: ObservationSessionCoordinator
     let manualProfileIngestor: ManualProfileIngestor
+    let voiceAgent: VoiceAgentCoordinator
 
     init() {
         let database = SQLiteStore()
@@ -50,17 +51,21 @@ final class AppDependencyContainer {
 
         let screenCapture = ScreenCaptureManager()
         let visionOCR = VisionOCRManager(pipeline: ocrPipeline)
+        let speechRecognition = SpeechRecognitionManager(audioConfigurator: audioConfigurator)
+        let contextBuilder = ContextBuilder()
         self.screenCapture = screenCapture
         self.visionOCR = visionOCR
-        self.speechRecognition = SpeechRecognitionManager(audioConfigurator: audioConfigurator)
-        self.contextBuilder = ContextBuilder()
+        self.speechRecognition = speechRecognition
+        self.contextBuilder = contextBuilder
         self.behaviorAnalysis = BehaviorAnalysisEngine()
         self.memory = MemoryManager(store: database)
 
         let remoteMemory = EverOSMemoryService(client: everOSClient, uploader: everOSUploader)
         self.remoteMemory = remoteMemory
-        self.ai = GemmaService(client: ollamaClient, remoteMemory: remoteMemory)
-        self.voiceOutput = VoiceOutputManager()
+        let ai = GemmaService(client: ollamaClient, remoteMemory: remoteMemory, database: database)
+        let voiceOutput = VoiceOutputManager()
+        self.ai = ai
+        self.voiceOutput = voiceOutput
 
         let hybridPipeline = HybridProfilePipeline(
             remoteMemory: remoteMemory,
@@ -69,17 +74,27 @@ final class AppDependencyContainer {
         )
         self.hybridPipeline = hybridPipeline
 
-        self.observationCoordinator = ObservationSessionCoordinator(
+        let observationCoordinator = ObservationSessionCoordinator(
             screenCapture: screenCapture,
             visionOCR: visionOCR,
             remoteMemory: remoteMemory,
             database: database,
             hybridPipeline: hybridPipeline
         )
+        self.observationCoordinator = observationCoordinator
         self.manualProfileIngestor = ManualProfileIngestor(
             remoteMemory: remoteMemory,
             database: database,
             hybridPipeline: hybridPipeline
+        )
+
+        self.voiceAgent = VoiceAgentCoordinator(
+            speech: speechRecognition,
+            voice: voiceOutput,
+            ai: ai,
+            contextBuilder: contextBuilder,
+            observation: observationCoordinator,
+            database: database
         )
 
         try? database.open()

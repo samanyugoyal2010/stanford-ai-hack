@@ -1,14 +1,16 @@
 import Foundation
 import Observation
 
-/// Drives the main dashboard by surfacing subsystem statuses from the DI graph.
-///
-/// This milestone only displays placeholder statuses (all start as `.notStarted`).
-/// Later iterations can start/stop the observation pipeline from here.
+/// Drives the main dashboard: subsystem statuses plus Start/Stop for observation + voice agent.
 @Observable
 @MainActor
 final class DashboardViewModel {
     private let container: AppDependencyContainer
+
+    private(set) var isSessionActive = false
+    private(set) var isStarting = false
+    private(set) var lastError: String?
+    private(set) var ollamaReady: Bool?
 
     init(container: AppDependencyContainer) {
         self.container = container
@@ -34,6 +36,22 @@ final class DashboardViewModel {
         container.memory.status
     }
 
+    var agentPhase: VoiceAgentPhase {
+        container.voiceAgent.phase
+    }
+
+    var lastUserUtterance: String {
+        container.voiceAgent.lastUserUtterance
+    }
+
+    var lastAgentReply: String {
+        container.voiceAgent.lastAgentReply
+    }
+
+    var samplesSent: Int {
+        container.observationCoordinator.samplesSent
+    }
+
     /// Card models bound by `DashboardView`.
     var statusCards: [StatusCardModel] {
         [
@@ -43,6 +61,49 @@ final class DashboardViewModel {
             StatusCardModel(title: "AI Status", status: aiStatus),
             StatusCardModel(title: "Memory Status", status: memoryStatus)
         ]
+    }
+
+    func refreshOllamaStatus() async {
+        ollamaReady = await container.ollamaClient.isReachable()
+    }
+
+    func startSession() async {
+        guard !isSessionActive, !isStarting else { return }
+        isStarting = true
+        lastError = nil
+        defer { isStarting = false }
+
+        let reachable = await container.ollamaClient.isReachable()
+        ollamaReady = reachable
+        guard reachable else {
+            lastError = "Ollama is offline. Start Ollama and pull \(AppConstants.defaultModelName)."
+            return
+        }
+
+        do {
+            try await container.observationCoordinator.startSession()
+            try await container.voiceAgent.start()
+            isSessionActive = true
+        } catch {
+            lastError = error.localizedDescription
+            await container.voiceAgent.stop()
+            _ = try? await container.observationCoordinator.stopSession(extractProfile: false)
+            isSessionActive = false
+        }
+    }
+
+    func stopSession() async {
+        guard isSessionActive || container.voiceAgent.isRunning || container.observationCoordinator.isRunning else {
+            return
+        }
+        lastError = nil
+        await container.voiceAgent.stop()
+        do {
+            _ = try await container.observationCoordinator.stopSession(extractProfile: false)
+        } catch {
+            lastError = error.localizedDescription
+        }
+        isSessionActive = false
     }
 }
 

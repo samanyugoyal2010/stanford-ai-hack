@@ -1,18 +1,30 @@
+import AVFoundation
 import Foundation
 
-/// Configures AVFoundation audio session / input routing for speech recognition.
-///
-/// Future work: select the default input device, handle route changes, and
-/// coordinate with `SFSpeechAudioBufferRecognitionRequest`.
+enum AudioCaptureError: Error, LocalizedError {
+    case noInputDevice
+
+    var errorDescription: String? {
+        switch self {
+        case .noInputDevice:
+            return "No microphone input device found. Connect a mic and grant Microphone permission."
+        }
+    }
+}
+
+/// Validates AVFoundation audio input availability for speech recognition on macOS.
 struct AudioCaptureConfigurator: Sendable {
-    /// Prepare audio input for recognition. Placeholder performs no AV setup.
+    /// Ensures a default audio input device exists before recognition starts.
     func prepareSession() async throws -> Bool {
-        AppLogger.shared.debug("AudioCaptureConfigurator.prepareSession() stub", category: .audio)
+        guard AVCaptureDevice.default(for: .audio) != nil else {
+            throw AudioCaptureError.noInputDevice
+        }
+        AppLogger.shared.debug("AudioCaptureConfigurator.prepareSession() ready", category: .audio)
         return true
     }
 
-    /// Release audio resources. Placeholder is a no-op.
+    /// Release audio resources (engine lifecycle owned by SpeechRecognitionManager).
     func tearDown() async {
-        AppLogger.shared.debug("AudioCaptureConfigurator.tearDown() stub", category: .audio)
+        AppLogger.shared.debug("AudioCaptureConfigurator.tearDown()", category: .audio)
     }
 }

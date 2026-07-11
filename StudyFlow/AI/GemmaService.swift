@@ -2,9 +2,6 @@ import Foundation
 import Observation
 
 /// High-level AI service that turns study context into Socratic guidance via Gemma 4.
-///
-/// Profile extraction is owned by EverOS. This service will later *consume* retrieved
-/// profile/episodes when building Socratic prompts — never reveal direct homework answers.
 @Observable
 @MainActor
 final class GemmaService: AIProviding {
@@ -12,16 +9,25 @@ final class GemmaService: AIProviding {
 
     private let client: OllamaClient
     private let remoteMemory: EverOSMemoryService?
+    private let database: SQLiteStore?
 
-    init(client: OllamaClient = OllamaClient(), remoteMemory: EverOSMemoryService? = nil) {
+    init(
+        client: OllamaClient = OllamaClient(),
+        remoteMemory: EverOSMemoryService? = nil,
+        database: SQLiteStore? = nil
+    ) {
         self.client = client
         self.remoteMemory = remoteMemory
+        self.database = database
     }
 
     func start() async throws {
-        AppLogger.shared.info("GemmaService.start() — AI reasoning not implemented yet", category: .ai)
-        _ = await client.isReachable()
-        status = .idle
+        let reachable = await client.isReachable()
+        status = reachable ? .idle : .failed("Ollama unreachable")
+        if !reachable {
+            throw OllamaError.unreachable
+        }
+        AppLogger.shared.info("GemmaService.start() — Ollama reachable", category: .ai)
     }
 
     func stop() async {
@@ -34,13 +40,60 @@ final class GemmaService: AIProviding {
         insights: [BehaviorInsight],
         memories: [MemoryEntry]
     ) async throws -> String {
+        status = .running
+        defer { status = .idle }
+
+        let ideal = database.flatMap { try? $0.loadLearnerProfile()?.ideal }
         let personalized = await buildPersonalizedContext(topicHint: context.activitySummary)
-        _ = (context, insights, memories, personalized)
-        // Intentionally empty until the Socratic prompt pipeline is built.
-        return try await client.generate(prompt: "")
+        let prompt = SocraticPrompt.build(
+            context: context,
+            idealProfile: ideal,
+            everOSSnippets: personalized,
+            conversationHistory: []
+        )
+        _ = (insights, memories)
+        return try await client.generate(prompt: prompt, formatJSON: false)
     }
 
-    /// Pulls EverOS profile + episodic snippets for future Gemma prompt grounding.
+    func streamGuidance(
+        context: StudyContext,
+        insights: [BehaviorInsight],
+        memories: [MemoryEntry],
+        conversationHistory: [(role: String, text: String)],
+        idealProfile: IdealLearnerProfile?
+    ) -> AsyncThrowingStream<String, Error> {
+        let ideal = idealProfile ?? database.flatMap { try? $0.loadLearnerProfile()?.ideal }
+        _ = (insights, memories)
+
+        return AsyncThrowingStream { continuation in
+            let task = Task { @MainActor in
+                self.status = .running
+                do {
+                    let personalized = await self.buildPersonalizedContext(topicHint: context.activitySummary)
+                    let prompt = SocraticPrompt.build(
+                        context: context,
+                        idealProfile: ideal,
+                        everOSSnippets: personalized,
+                        conversationHistory: conversationHistory
+                    )
+                    for try await chunk in await self.client.generateStream(prompt: prompt) {
+                        if Task.isCancelled { break }
+                        continuation.yield(chunk)
+                    }
+                    self.status = .idle
+                    continuation.finish()
+                } catch {
+                    self.status = .failed(error.localizedDescription)
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    /// Pulls EverOS profile + episodic snippets for prompt grounding.
     func buildPersonalizedContext(topicHint: String) async -> String {
         guard let remoteMemory else { return "" }
         do {

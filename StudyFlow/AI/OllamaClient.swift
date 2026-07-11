@@ -106,6 +106,81 @@ actor OllamaClient {
         }
     }
 
+    /// Streams `POST /api/generate` with `stream: true` (NDJSON chunks). Spoken prose only — no JSON format.
+    func generateStream(
+        prompt: String,
+        model: String = AppConstants.defaultModelName
+    ) -> AsyncThrowingStream<String, Error> {
+        let baseURL = self.baseURL
+        let session = self.session
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    guard let url = URL(string: "/api/generate", relativeTo: baseURL)?.absoluteURL else {
+                        throw OllamaError.unreachable
+                    }
+
+                    let body: [String: Any] = [
+                        "model": model,
+                        "prompt": prompt,
+                        "stream": true
+                    ]
+
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+                    request.timeoutInterval = 120
+
+                    let (bytes, response): (URLSession.AsyncBytes, URLResponse)
+                    do {
+                        (bytes, response) = try await session.bytes(for: request)
+                    } catch {
+                        throw OllamaError.unreachable
+                    }
+
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    guard (200...299).contains(code) else {
+                        throw OllamaError.httpStatus(code, "stream start failed")
+                    }
+
+                    var lineData = Data()
+                    for try await byte in bytes {
+                        if Task.isCancelled { break }
+                        if byte == UInt8(ascii: "\n") {
+                            if !lineData.isEmpty {
+                                if let chunk = Self.parseStreamLine(lineData) {
+                                    continuation.yield(chunk)
+                                }
+                                lineData = Data()
+                            }
+                        } else {
+                            lineData.append(byte)
+                        }
+                    }
+                    if !lineData.isEmpty, let chunk = Self.parseStreamLine(lineData) {
+                        continuation.yield(chunk)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    private static func parseStreamLine(_ data: Data) -> String? {
+        guard let parsed = try? JSONDecoder().decode(OllamaStreamChunk.self, from: data) else {
+            return nil
+        }
+        let piece = parsed.response
+        return piece.isEmpty ? nil : piece
+    }
+
     private static func stripCodeFences(_ text: String) -> String {
         var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if result.hasPrefix("```") {
@@ -119,4 +194,9 @@ actor OllamaClient {
 
 private struct OllamaGenerateResponse: Decodable {
     let response: String
+}
+
+private struct OllamaStreamChunk: Decodable {
+    let response: String
+    let done: Bool?
 }
