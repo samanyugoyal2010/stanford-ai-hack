@@ -1,0 +1,44 @@
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+
+const ollamaURL = process.env.LUNAR_OLLAMA_URL || 'http://127.0.0.1:11434';
+const ollamaModel = process.env.LUNAR_OLLAMA_MODEL || 'gemma4:e2b-it-qat';
+const accurateHeartURL = 'https://persist-3d-media.s3.amazonaws.com/741932/VH_M_Heart.glb';
+const localHeartSTL = '/Users/venkat/Downloads/heart_NIH3D.stl';
+
+async function ollama(pathname, body) {
+  const response = await fetch(`${ollamaURL}/${pathname}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error(`Ollama returned ${response.status}`);
+  return response.json();
+}
+
+function createWindow() {
+  const window = new BrowserWindow({ width: 1280, height: 820, minWidth: 980, minHeight: 680, titleBarStyle: 'hiddenInset', webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false } });
+  window.loadFile(path.join(__dirname, 'index.html'));
+}
+
+ipcMain.handle('ollama-status', async () => {
+  try { const response = await fetch(`${ollamaURL}/api/tags`); if (!response.ok) throw new Error(); const data = await response.json(); return { online: true, model: data.models?.[0]?.name || ollamaModel }; }
+  catch { return { online: false, model: ollamaModel }; }
+});
+ipcMain.handle('ollama-chat', async (_, prompt) => (await ollama('api/chat', { model: ollamaModel, messages: [{ role: 'system', content: 'You are Lunar, a concise desktop modeling assistant. Answer in 3 to 6 short sentences. Do not recommend other software. When the user asks for a diagram or 3D model, briefly describe the parts and say that you are creating the model in the scene workspace.' }, { role: 'user', content: prompt }], options: { num_predict: 220, temperature: 0.25 }, stream: false })).message.content);
+ipcMain.handle('ollama-scene', async (_, { prompt, image }) => {
+  const data = await ollama('api/generate', { model: ollamaModel, prompt: `${prompt} Return JSON only.`, format: 'json', images: image ? [image] : undefined, stream: false });
+  return JSON.parse(data.response);
+});
+ipcMain.handle('pick-image', async () => { const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] }); return result.canceled ? null : result.filePaths[0]; });
+ipcMain.handle('pick-model', async () => { const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: '3D models', extensions: ['glb', 'gltf', 'obj', 'stl'] }] }); return result.canceled ? null : result.filePaths[0]; });
+ipcMain.handle('read-model', async (_, filePath) => new Uint8Array(await fs.readFile(filePath)));
+ipcMain.handle('fetch-local-heart', async () => new Uint8Array(await fs.readFile(localHeartSTL)));
+ipcMain.handle('read-image', async (_, filePath) => (await fs.readFile(filePath)).toString('base64'));
+ipcMain.handle('fetch-accurate-model', async () => { const response = await fetch(accurateHeartURL); if (!response.ok) throw new Error(`Model source returned ${response.status}`); return new Uint8Array(await response.arrayBuffer()); });
+ipcMain.handle('blender-status', async () => new Promise((resolve) => { const child = spawn(process.env.LUNAR_BLENDER || 'blender', ['--version']); let output = ''; child.stdout.on('data', (chunk) => { output += chunk; }); child.on('error', () => resolve({ available: false })); child.on('close', (code) => resolve({ available: code === 0, version: output.split('\n')[0] || null })); }));
+ipcMain.handle('choose-references', async () => { const result = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'], filters: [{ name: 'Reference images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] }); return result.canceled ? [] : result.filePaths; });
+ipcMain.handle('run-blender-pipeline', async (_, payload) => new Promise((resolve, reject) => { const output = path.join(app.getPath('temp'), `lunar-${Date.now()}`); const child = spawn(process.env.LUNAR_BLENDER || 'blender', ['--background', '--python', path.join(__dirname, '..', 'scripts', 'lunar_blender_pipeline.py'), '--', JSON.stringify({ ...payload, output })]); let logs = ''; child.stdout.on('data', (chunk) => { logs += chunk; }); child.stderr.on('data', (chunk) => { logs += chunk; }); child.on('error', () => reject(new Error('Blender is not installed. Install Blender and set LUNAR_BLENDER if it is not on PATH.'))); child.on('close', (code) => code === 0 ? resolve({ output, logs }) : reject(new Error(logs.slice(-1200) || `Blender exited with code ${code}`))); }));
+
+app.whenReady().then(() => { createWindow(); app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
