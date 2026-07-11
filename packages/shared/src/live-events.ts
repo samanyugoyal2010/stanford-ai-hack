@@ -72,8 +72,16 @@ export const liveClientMsgSchema = z.discriminatedUnion("t", [
   // server persists only that (not the text it generated ahead of the voice).
   z.object({ t: z.literal("cancel"), spoken: z.string().optional() }),
   z.object({ t: z.literal("control"), action: z.enum(["camera_on", "camera_off", "screen_on", "screen_off", "end"]) }),
-  // Answer to need_frame; the hi-res JPEG follows as the next FRAME_IN binary.
-  z.object({ t: z.literal("frame_response"), reqId: z.string() }),
+  // Answer to need_frame. Prefer inline base64 JPEG (`data`) so look never races
+  // the separate FRAME_IN binary. Binary still accepted as a fallback.
+  // `source` is the capture the client actually used (screen preferred when both on).
+  z.object({
+    t: z.literal("frame_response"),
+    reqId: z.string(),
+    data: z.string().optional(),
+    mime: z.string().optional(),
+    source: z.enum(["camera", "screen"]).optional(),
+  }),
   // Result of a tool_bridge OS action (clipboard text / ok / error message).
   z.object({ t: z.literal("tool_bridge_result"), reqId: z.string(), output: z.string() }),
 ]);

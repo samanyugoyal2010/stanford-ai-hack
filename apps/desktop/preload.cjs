@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld("openlive", {
   mini: () => ipcRenderer.send("openlive:mini"),
   // Restore the normal window.
   unmini: () => ipcRenderer.send("openlive:unmini"),
-  // Kept for compatibility; sphere mode ignores content height.
+  // Resize floating mini window (sphere = 64; taller for Focus check-in).
   miniSize: (h) => ipcRenderer.send("openlive:mini-size", h),
   // Custom window controls — the window is frameless (no native traffic lights).
   winClose: () => ipcRenderer.send("openlive:win-close"),

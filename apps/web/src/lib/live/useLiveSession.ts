@@ -2,14 +2,18 @@
 
 import { useCallback, useRef } from "react";
 import { chatStore } from "@/lib/chatStore";
+import { useUi } from "@/lib/uiStore";
 import { LiveClient } from "./liveClient";
 import { CameraCapture } from "./cameraCapture";
 import { AudioPlayer } from "./audioPlayback";
 import { VoiceEngine, type EnginePhase } from "./voiceEngine";
 import { loadModels, modelsReady, modelsCached } from "./models";
-import { observeIntervalMs, useLiveStore } from "./liveStore";
+import { focusIntervalMs, observeIntervalMs, useLiveStore } from "./liveStore";
 
 const NO_BANDS = [0, 0, 0, 0, 0];
+const FOCUS_HELP_TEXT = "I need a hand — can you look at where I'm stuck?";
+/** How often the Focus dwell clock is checked. */
+const FOCUS_TICK_MS = 5_000;
 
 function abToBase64(ab: ArrayBuffer): string {
   const bytes = new Uint8Array(ab);
@@ -36,6 +40,9 @@ export function useLiveSession(chatId: string) {
   const onPageHide = useRef<() => void>(() => {});
   const observeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const observeInFlight = useRef(false);
+  const focusTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Last moment of speech (user or agent) — Focus fires after quiet dwell. */
+  const lastQuietAt = useRef(Date.now());
   // Word-by-word transcript reveal, synced to the VOICE (not the generated stream):
   // `segText` = chunks of the CURRENT segment already voiced, `curChunk` = the one
   // revealing now, `revealRaf` = its frame. Tool activity is shown LIVE on tool_start
@@ -51,12 +58,43 @@ export function useLiveSession(chatId: string) {
     observeInFlight.current = false;
   };
 
+  const stopFocusWatch = () => {
+    if (focusTimer.current) { clearInterval(focusTimer.current); focusTimer.current = null; }
+  };
+
+  /** Reset quiet dwell (speech activity or Focus dismiss/help). */
+  const bumpQuiet = useCallback((clearPrompt = true) => {
+    lastQuietAt.current = Date.now();
+    if (clearPrompt && useLiveStore.getState().focusPrompt) set({ focusPrompt: false });
+  }, [set]);
+
+  const startFocusWatch = useCallback(() => {
+    stopFocusWatch();
+    lastQuietAt.current = Date.now();
+    set({ focusPrompt: false });
+    focusTimer.current = setInterval(() => {
+      const st = useLiveStore.getState();
+      if (tornDown.current || !st.active) return;
+      // Warm-up and live speech don't count toward quiet dwell.
+      if (st.warming || st.phase === "listening" || st.phase === "thinking" || st.phase === "speaking") {
+        lastQuietAt.current = Date.now();
+        return;
+      }
+      if (st.focusPrompt) return;
+      if (st.phase !== "idle") return;
+      if (Date.now() - lastQuietAt.current >= focusIntervalMs(st.interruptLevel)) {
+        set({ focusPrompt: true });
+      }
+    }, FOCUS_TICK_MS);
+  }, [set]);
+
   // ── single teardown authority — releases EVERYTHING, always ───────────────
   const teardown = useCallback(() => {
     if (tornDown.current) return;
     tornDown.current = true;
     stopReveal();
     stopObserveLoop();
+    stopFocusWatch();
     window.removeEventListener("pagehide", onPageHide.current);
     try { client.current?.close(); } catch { /* */ }
     try { engine.current?.stop(); } catch { /* */ }              // destroys VAD + closes audio
@@ -71,7 +109,7 @@ export function useLiveSession(chatId: string) {
     client.current = null; engine.current = null; camRef.current = null; screenRef.current = null;
     // Keep `error` so the user sees why it ended; start() clears it next time.
     // Keep lobby prefs (studyGoal / interruptLevel).
-    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, cameraStream: null, screenStream: null, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", warming: false, tutorStatus: "" });
+    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, cameraStream: null, screenStream: null, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", warming: false, tutorStatus: "", focusPrompt: false });
   }, [chatId, set]);
 
   const captureActiveFrames = useCallback(async () => {
@@ -86,6 +124,8 @@ export function useLiveSession(chatId: string) {
     const st = useLiveStore.getState();
     if (tornDown.current || !client.current?.ready) return;
     if (!st.screenOn && !st.cameraOn) return;
+    // Don't peek while Focus check-in is open (avoid double-nudge).
+    if (st.focusPrompt) return;
     // Don't peek while the student is talking / the tutor is mid-reply.
     if (st.phase === "listening" || st.phase === "thinking" || st.phase === "speaking") return;
     if (observeInFlight.current) return;
@@ -110,7 +150,7 @@ export function useLiveSession(chatId: string) {
 
   const start = useCallback(async () => {
     tornDown.current = false;
-    set({ error: undefined, phase: "connecting", active: true, downloadPct: 0, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", tutorStatus: "" });
+    set({ error: undefined, phase: "connecting", active: true, downloadPct: 0, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", tutorStatus: "", focusPrompt: false });
     // Unlock audio NOW, synchronously inside the click gesture. iOS Safari blocks
     // AudioContext playback that starts after an await, so priming here (before the
     // model download) is what lets the agent's voice actually play on iPhone.
@@ -134,7 +174,11 @@ export function useLiveSession(chatId: string) {
       const eng = new VoiceEngine({
         // Entering "listening" clears the previous answer's caption so the user
         // sees themselves (or "Listening…") the moment they start talking.
-        onPhase: (p: EnginePhase) => set(p === "listening" ? { phase: p, agentCaption: "", toolStatus: "" } : { phase: p }),
+        // Any speech phase also resets Focus quiet dwell.
+        onPhase: (p: EnginePhase) => {
+          if (p === "listening" || p === "thinking" || p === "speaking") bumpQuiet();
+          set(p === "listening" ? { phase: p, agentCaption: "", toolStatus: "" } : { phase: p });
+        },
         onPartial: (text) => set({ userCaption: text, userPartial: true, warming: false }),
         onUserText: (text) => void handleUserText(text),
         // A chunk just STARTED voicing. Drive TWO things from it: the composer
@@ -142,6 +186,7 @@ export function useLiveSession(chatId: string) {
         // chat transcript, which types this chunk word-by-word in lockstep with the
         // audio so the panel shows exactly what's been said (honest on barge-in).
         onAgentText: (sentence, durationMs) => {
+          bumpQuiet();
           set({ agentCaption: sentence, agentCaptionMs: durationMs, tutorStatus: "" });
           const id = assistantId.current;
           // The previous chunk's audio has finished (this one is now playing) — commit
@@ -198,6 +243,7 @@ export function useLiveSession(chatId: string) {
           });
           set({ phase: "idle", error: undefined, warming: true, tutorStatus: "watching" });
           startObserveLoop();
+          startFocusWatch();
         },
         onReconnecting: () => set({ phase: "reconnecting" }),
         onClose: () => teardown(),
@@ -255,11 +301,32 @@ export function useLiveSession(chatId: string) {
         },
         onNeedFrame: async (reqId) => {
           const st = useLiveStore.getState();
-          const src = st.cameraOn ? camRef.current : st.screenOn ? screenRef.current : null;
-          if (!src) { client.current?.frameResponse(reqId); return; }
-          const jpeg = await src.captureHiRes();
-          client.current?.frameResponse(reqId);   // server arms for the look frame FIRST
-          if (jpeg) client.current?.sendFrame(jpeg);
+          // Prefer shared screen for study; never silently fall back to camera when
+          // screen is on — report source so the server knows what we tried.
+          if (st.screenOn) {
+            const src = screenRef.current;
+            if (!src) { client.current?.frameResponse(reqId, { source: "screen" }); return; }
+            let jpeg = await src.captureHiRes(1600, 0.92);
+            if (!jpeg) jpeg = await src.captureFreshest();
+            if (jpeg) {
+              client.current?.frameResponse(reqId, { data: abToBase64(jpeg), mime: "image/jpeg", source: "screen" });
+            } else {
+              client.current?.frameResponse(reqId, { source: "screen" });
+            }
+            return;
+          }
+          if (st.cameraOn && camRef.current) {
+            const src = camRef.current;
+            let jpeg = await src.captureHiRes(1600, 0.92);
+            if (!jpeg) jpeg = await src.captureFreshest();
+            if (jpeg) {
+              client.current?.frameResponse(reqId, { data: abToBase64(jpeg), mime: "image/jpeg", source: "camera" });
+            } else {
+              client.current?.frameResponse(reqId, { source: "camera" });
+            }
+            return;
+          }
+          client.current?.frameResponse(reqId);
         },
         // OS bridge (clipboard / open_url) — runs through the Electron main process.
         // On the web build there's no bridge, so we answer instantly (no dead air).
@@ -291,11 +358,12 @@ export function useLiveSession(chatId: string) {
       teardown();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId, set, teardown, startObserveLoop]);
+  }, [chatId, set, teardown, startObserveLoop, startFocusWatch, bumpQuiet]);
 
   // A completed user turn: attach the freshest camera frame, send the text, and
   // reflect the exchange in the chat store (so it renders + persists like typing).
   const handleUserText = useCallback(async (text: string) => {
+    bumpQuiet();
     // Attach the freshest frame from every active visual source (camera + screen
     // can both be on), inline with the turn so the model sees exactly this moment.
     const frames = await captureActiveFrames();
@@ -304,7 +372,23 @@ export function useLiveSession(chatId: string) {
     if (assistantId.current) chatStore.liveFinish(chatId, assistantId.current);
     resetTranscript(); // new turn → the word reveal starts fresh (don't carry prior spoken text)
     assistantId.current = chatStore.liveUserTurn(chatId, text);
-  }, [captureActiveFrames, chatId, set]);
+  }, [bumpQuiet, captureActiveFrames, chatId, set]);
+
+  /** Focus: dismiss check-in and restart quiet dwell. */
+  const dismissFocus = useCallback(() => {
+    bumpQuiet();
+  }, [bumpQuiet]);
+
+  /** Focus: unmute, expand UI, and kick a Talk turn with screen context. */
+  const requestFocusHelp = useCallback(() => {
+    bumpQuiet();
+    if (useLiveStore.getState().muted) {
+      engine.current?.setMuted(false);
+      set({ muted: false });
+    }
+    useUi.getState().setMinimized(false);
+    void handleUserText(FOCUS_HELP_TEXT);
+  }, [bumpQuiet, handleUserText, set]);
 
   // Explicit, user-initiated model download (pre-call). Nothing downloads until
   // the user asks — and because the worker stays warm, this only happens once.
@@ -429,5 +513,5 @@ export function useLiveSession(chatId: string) {
   // reactive spectrum while you or the agent talk.
   const getBands = useCallback(() => ({ mic: engine.current?.micBands() ?? NO_BANDS, agent: engine.current?.agentBands() ?? NO_BANDS }), []);
 
-  return { start, stop, download, toggleMute, toggleCamera, toggleScreen, getLevels, getBands, refreshDevices, setMic, setCam };
+  return { start, stop, download, toggleMute, toggleCamera, toggleScreen, getLevels, getBands, refreshDevices, setMic, setCam, dismissFocus, requestFocusHelp };
 }

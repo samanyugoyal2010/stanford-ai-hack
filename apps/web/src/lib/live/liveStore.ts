@@ -33,6 +33,8 @@ interface LiveState {
   studyGoal: string;
   interruptLevel: InterruptLevel;
   tutorStatus: TutorStatus;
+  /** Focus check-in: quiet dwell timed out — show "Still with me?" */
+  focusPrompt: boolean;
   error?: string;
   micId?: string;
   camId?: string;
@@ -66,6 +68,7 @@ export const useLiveStore = create<LiveState>((set) => ({
   studyGoal: "",
   interruptLevel: "balanced",
   tutorStatus: "",
+  focusPrompt: false,
   mics: [],
   cams: [],
   set: (p) => set(p),
@@ -77,5 +80,14 @@ export function observeIntervalMs(level: InterruptLevel): number {
     case "quiet": return 10_000;
     case "active": return 4_000;
     default: return 6_000;
+  }
+}
+
+/** Quiet-dwell before Focus check-in, keyed to interrupt level. */
+export function focusIntervalMs(level: InterruptLevel): number {
+  switch (level) {
+    case "quiet": return 8 * 60_000;
+    case "active": return 3 * 60_000;
+    default: return 5 * 60_000;
   }
 }
