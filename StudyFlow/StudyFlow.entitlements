@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox keeps StudyFlow constrained to declared capabilities. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- Required for Speech / AVFoundation microphone capture. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<!-- Outbound network for EverOS Cloud + local Ollama HTTP API. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Allow choosing .txt/.md learner profile files via the file importer. -->
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+	<!--
+	  Screen Recording is a TCC permission prompted at runtime via ScreenCaptureKit.
+	  It is not granted through an entitlement key in the same way as microphone access.
+	-->
+</dict>
+</plist>
