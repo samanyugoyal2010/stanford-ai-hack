@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
-import type { SseEvent, MessageBlock, LiveServerMsg } from "@openlive/shared";
+import type { SseEvent, MessageBlock, LiveServerMsg, InterruptLevel, LiveSessionMode } from "@openlive/shared";
 import { LIVE_TAG, liveClientMsgSchema } from "@openlive/shared";
 import { createChat, addMessage, listMessages, renameChat } from "@openlive/db";
 import type { Message } from "@openlive/harness";
@@ -11,6 +11,24 @@ import { LiveTurnRunner } from "./turn-runner.js";
 type Frame = { data: string; mime: string };
 type TurnFrame = Frame & { source: "camera" | "screen" };
 const HISTORY_TURNS = 20; // recent messages to rehydrate on reconnect
+
+/** Min gap between proactive interventions that actually speak (ms). */
+const INTERRUPT_COOLDOWN: Record<InterruptLevel, number> = {
+  quiet: 45_000,
+  balanced: 20_000,
+  active: 10_000,
+};
+
+/** Max spoken proactive interventions in a rolling minute. */
+const INTERRUPT_PER_MIN: Record<InterruptLevel, number> = {
+  quiet: 2,
+  balanced: 4,
+  active: 6,
+};
+
+const OBSERVE_PROMPT = `[PROACTIVE OBSERVE] The student did not speak. Look at their screen right now.
+If they are progressing, reading, or nothing useful to say, reply with exactly SILENCE and nothing else.
+Otherwise speak one short Socratic hint or question (one or two sentences). Prefer SILENCE over chatter.`;
 
 // Some providers (e.g. MiniMax) leak control-token fragments like "[e[" into the
 // text stream. Spoken replies never contain square brackets, so scrub them from
@@ -33,10 +51,18 @@ function truncateSpokenText(blocks: MessageBlock[], spoken: string): void {
   if (!placed && s) blocks.unshift({ type: "text", text: s });
 }
 
+function isSilenceReply(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (/^SILENCE\b/i.test(t) && t.replace(/^SILENCE\b/i, "").trim().length === 0) return true;
+  if (/^SILENCE[.!]?\s*$/i.test(t)) return true;
+  return false;
+}
+
 // One live call — THIN. The browser runs the whole voice stack (VAD, STT, turn
 // detection, TTS) on-device; this server only receives the final user text + the
 // freshest camera frame, runs the LLM turn, streams reply text back, and PERSISTS
-// the conversation.
+// the conversation. Study Tutor adds proactive `observe` turns.
 export class LiveSession {
   private runner: LiveTurnRunner;
   private warmAc: AbortController | null = null; // aborts the cache-warm request on teardown
@@ -49,6 +75,13 @@ export class LiveSession {
   private titled = false;                  // rename the chat from the first user turn
   private lastFrame: Frame | null = null;  // freshest frame, for the `look` handshake
   private closed = false;
+
+  // Study Tutor session config (defaults = classic assistant).
+  private mode: LiveSessionMode = "assistant";
+  private studyGoal = "";
+  private interruptLevel: InterruptLevel = "balanced";
+  private lastSpokenInterventionAt = 0;
+  private interventionTimes: number[] = [];
 
   // `look` tool ↔ client hi-res frame handshake.
   private lookPending: { reqId: string; resolve: (f: Frame | null) => void } | null = null;
@@ -148,6 +181,8 @@ export class LiveSession {
     try { msg = liveClientMsgSchema.parse(JSON.parse(str)); } catch { return; }
     switch (msg.t) {
       case "user_text": return void this.runTurn(msg.text, msg.frames ?? []);
+      case "observe": return void this.runObserve(msg.frames ?? []);
+      case "session_config": return this.applySessionConfig(msg);
       case "cancel": if (this.turnActive) this.bargeSpoken = msg.spoken ?? null; return this.interrupt();
       case "control":
         if (msg.action === "camera_on") this.cameraOn = true;
@@ -168,6 +203,38 @@ export class LiveSession {
     }
   }
 
+  private applySessionConfig(msg: {
+    mode?: LiveSessionMode;
+    studyGoal?: string;
+    interruptLevel?: InterruptLevel;
+  }) {
+    this.mode = msg.mode ?? "assistant";
+    this.studyGoal = msg.studyGoal?.trim() ?? "";
+    this.interruptLevel = msg.interruptLevel ?? "balanced";
+    this.runner.setPromptOpts({
+      mode: this.mode,
+      studyGoal: this.studyGoal || undefined,
+      interruptLevel: this.interruptLevel,
+    });
+    if (this.mode === "study_tutor" && this.chatId && !this.titled) {
+      this.titled = true;
+      const title = this.studyGoal
+        ? `Study: ${this.studyGoal.replace(/\s+/g, " ").trim().slice(0, 40)}`
+        : "Study Tutor";
+      try { renameChat(this.chatId, title); } catch { /* */ }
+    }
+    this.send({ t: "sse", event: { type: "status", text: this.mode === "study_tutor" ? "tutor_ready" : "ready" } });
+  }
+
+  private canIntervene(): boolean {
+    const now = Date.now();
+    const cool = INTERRUPT_COOLDOWN[this.interruptLevel];
+    if (now - this.lastSpokenInterventionAt < cool) return false;
+    const cutoff = now - 60_000;
+    this.interventionTimes = this.interventionTimes.filter((t) => t >= cutoff);
+    return this.interventionTimes.length < INTERRUPT_PER_MIN[this.interruptLevel];
+  }
+
   /** Ask the client to run an OS action (clipboard / open_url) and await its
    *  result. On non-desktop clients the reply is instant ("not available"). */
   private bridge(op: "clipboard_read" | "clipboard_write" | "open_url", arg?: string): Promise<string> {
@@ -179,6 +246,67 @@ export class LiveSession {
       this.bridgePending.set(reqId, (out) => { clearTimeout(timer); resolve(out); });
       this.send({ t: "tool_bridge", reqId, op, arg });
     });
+  }
+
+  // ── proactive Study Tutor observe ───────────────────────────────────────
+  private async runObserve(frames: TurnFrame[] = []) {
+    if (this.closed || this.mode !== "study_tutor") return;
+    if (this.turnActive) return; // never interrupt a spoken turn
+    if (!this.screenOn && !this.cameraOn && !frames.length) return;
+    if (!this.canIntervene()) {
+      this.send({ t: "sse", event: { type: "status", text: "watching" } });
+      return;
+    }
+
+    this.turnActive = true;
+    const ac = new AbortController();
+    this.ac = ac;
+    this.send({ t: "sse", event: { type: "status", text: "observing" } });
+
+    // Buffer spoken text so we can drop SILENCE without TTS.
+    let buffered = "";
+    const blocks: MessageBlock[] = [];
+    const baseEmit = this.blockEmit(blocks, ac.signal);
+    const emit: Emit = async (e) => {
+      if (e.type === "text_delta") { buffered += e.text; return; }
+      return baseEmit(e);
+    };
+
+    try {
+      await this.runner.runTurn(OBSERVE_PROMPT, frames, emit, ac.signal);
+    } catch (e) {
+      if (!ac.signal.aborted) console.error("[live] observe:", e);
+    } finally {
+      const reply = buffered.trim().replace(/^["'`]+|["'`]+$/g, "");
+      const silent = isSilenceReply(reply);
+      if (!silent && !ac.signal.aborted) {
+        const spoken = reply.replace(/^SILENCE[,.:\s-]*/i, "").trim();
+        if (spoken) {
+          await baseEmit({ type: "text_delta", text: spoken });
+          this.lastSpokenInterventionAt = Date.now();
+          this.interventionTimes.push(this.lastSpokenInterventionAt);
+          scrubControlTokens(blocks);
+          // Ensure the spoken text is what we flush (buffer path may have empty text blocks).
+          if (!blocks.some((b) => b.type === "text" && (b as { text: string }).text.trim())) {
+            blocks.push({ type: "text", text: spoken });
+          }
+          if (this.chatId && blocks.length) {
+            try {
+              addMessage(this.chatId, "user", [{ type: "text", text: "[screen observe]" }], true);
+              addMessage(this.chatId, "assistant", blocks, true);
+            } catch { /* */ }
+          }
+        } else {
+          this.send({ t: "sse", event: { type: "status", text: "watching" } });
+        }
+      } else {
+        this.send({ t: "sse", event: { type: "status", text: "watching" } });
+      }
+      this.send({ t: "sse", event: { type: "done" } });
+      if (this.ac === ac) { this.ac = null; this.turnActive = false; }
+      const q = this.queuedText; this.queuedText = null;
+      if (q && !this.closed) void this.runTurn(q);
+    }
   }
 
   // ── turn ────────────────────────────────────────────────────────────────

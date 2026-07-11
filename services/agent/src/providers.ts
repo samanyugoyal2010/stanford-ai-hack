@@ -48,19 +48,26 @@ export interface ResolvedLive {
   effort?: Effort;
 }
 
-// Which provider powers LIVE voice. The `liveProviderId` setting if it's keyed;
-// else camera-first — prefer a keyed provider whose fast live model can SEE.
+function providerUsable(id: string): boolean {
+  const info = providerInfo(id);
+  if (!info) return false;
+  return Boolean(getProviderKey(id) || info.keyless);
+}
+
+// Which provider powers LIVE voice. Prefer an explicit `liveProviderId` (including
+// keyless Ollama). Else camera-first cloud keys; else local Ollama for Study Tutor.
 function liveProviderId(): string {
   const explicit = getSetting("liveProviderId");
-  if (explicit && providerInfo(explicit) && getProviderKey(explicit)) return explicit;
+  if (explicit && providerUsable(explicit)) return explicit;
   for (const id of ["anthropic", "openai", "minimax"]) {
     if (!getProviderKey(id)) continue;
     const rec = liveRecsFor(id).find((r) => r.default) ?? liveRecsFor(id)[0];
     if (rec?.vision) return id;
   }
-  // No vision provider keyed → first keyed provider at all.
+  // Prefer local Ollama (always keyless) before falling back to a random keyed host.
+  if (providerUsable("ollama")) return "ollama";
   const anyKeyed = BUILTIN_PROVIDERS.find((p) => getProviderKey(p.id));
-  return anyKeyed?.id ?? BUILTIN_PROVIDERS[0]!.id;
+  return anyKeyed?.id ?? "ollama";
 }
 
 // Optional dedicated vision model (its own provider), used to SEE for a live

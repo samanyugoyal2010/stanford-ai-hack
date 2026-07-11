@@ -82,6 +82,16 @@ export class LiveClient {
   userText(text: string, frames?: { data: string; mime: string; source: "camera" | "screen" }[]) {
     this.sendJson({ t: "user_text", text, ...(frames && frames.length ? { frames } : {}) });
   }
+  sessionConfig(cfg: {
+    mode: "assistant" | "study_tutor";
+    studyGoal?: string;
+    interruptLevel?: "quiet" | "balanced" | "active";
+  }) {
+    this.sendJson({ t: "session_config", ...cfg });
+  }
+  observe(frames?: { data: string; mime: string; source: "camera" | "screen" }[]) {
+    this.sendJson({ t: "observe", ...(frames && frames.length ? { frames } : {}) });
+  }
   cancel(spoken?: string) { this.sendJson({ t: "cancel", ...(spoken ? { spoken } : {}) }); }
   control(action: "camera_on" | "camera_off" | "screen_on" | "screen_off" | "end") { this.sendJson({ t: "control", action }); }
   frameResponse(reqId: string) { this.sendJson({ t: "frame_response", reqId }); }

@@ -23,6 +23,12 @@ export const LIVE_MODEL_RECS: Record<string, LiveModelRec[]> = {
     { model: "MiniMax-M2.5-highspeed", label: "M2.5 highspeed", note: "fast, strong tool use", vision: true, default: true },
     { model: "MiniMax-M3", label: "M3", note: "1M context, multimodal", vision: true },
   ],
+  // Local Study Tutor default — vision + chat in one Ollama model.
+  ollama: [
+    { model: "qwen2.5vl:7b", label: "Qwen2.5-VL 7B", note: "local vision tutor — sees your screen, no cloud", vision: true, default: true },
+    { model: "qwen2.5vl:3b", label: "Qwen2.5-VL 3B", note: "lighter local vision if 7B is tight", vision: true },
+    { model: "llama3.2-vision", label: "Llama 3.2 Vision", note: "local multimodal alternative", vision: true },
+  ],
 };
 
 /** Recommended live models for a provider (empty if none curated). */

@@ -48,7 +48,7 @@ export function MiniBar({ phase, muted, cameraOn, screenOn, cameraStream, screen
   getLevels: () => { mic: number; agent: number }; getBands: () => { mic: number[]; agent: number[] }; onEnd: () => void;
 }) {
   const setMinimized = useUi((s) => s.setMinimized);
-  const { userCaption, userPartial, agentCaption, toolStatus, warming } = useLiveStore();
+  const { userCaption, userPartial, agentCaption, toolStatus, warming, tutorStatus, sessionMode } = useLiveStore();
   const [confirmEnd, setConfirmEnd] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +72,15 @@ export function MiniBar({ phase, muted, cameraOn, screenOn, cameraStream, screen
 
   // While a tool runs or the model warms (and nothing's being spoken yet), surface
   // that as the caption with a shimmer.
-  const cue = toolStatus ? `${toolMeta(toolStatus).active}…` : warming ? "Warming up…" : "";
+  const cue = toolStatus
+    ? `${toolMeta(toolStatus).active}…`
+    : warming
+      ? "Warming up…"
+      : sessionMode === "study_tutor" && tutorStatus === "observing"
+        ? "Watching…"
+        : sessionMode === "study_tutor" && tutorStatus === "watching"
+          ? "Quiet"
+          : "";
   const caption = userPartial && userCaption ? userCaption : agentCaption || cue || (phase === "thinking" ? "Thinking…" : "Listening…");
   const cueOnly = !!cue && !(userPartial && userCaption) && !agentCaption;
 

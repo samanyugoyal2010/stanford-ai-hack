@@ -7,7 +7,7 @@ import { CameraCapture } from "./cameraCapture";
 import { AudioPlayer } from "./audioPlayback";
 import { VoiceEngine, type EnginePhase } from "./voiceEngine";
 import { loadModels, modelsReady, modelsCached } from "./models";
-import { useLiveStore } from "./liveStore";
+import { observeIntervalMs, useLiveStore } from "./liveStore";
 
 const NO_BANDS = [0, 0, 0, 0, 0];
 
@@ -21,7 +21,8 @@ function abToBase64(ab: ArrayBuffer): string {
 // Orchestrates one live call. THICK CLIENT: the VoiceEngine runs VAD+STT+TTS
 // on-device; this hook wires it to the /live socket (final text + camera frames
 // + cancel), the camera, and the chat store, and owns a single leak-proof
-// teardown that every close path routes through.
+// teardown that every close path routes through. Study Tutor adds a proactive
+// screen-observe loop when sessionMode is study_tutor.
 export function useLiveSession(chatId: string) {
   const set = useLiveStore((s) => s.set);
   const client = useRef<LiveClient | null>(null);
@@ -33,6 +34,8 @@ export function useLiveSession(chatId: string) {
   const assistantId = useRef<string | null>(null);
   const tornDown = useRef(false);
   const onPageHide = useRef<() => void>(() => {});
+  const observeTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const observeInFlight = useRef(false);
   // Word-by-word transcript reveal, synced to the VOICE (not the generated stream):
   // `segText` = chunks of the CURRENT segment already voiced, `curChunk` = the one
   // revealing now, `revealRaf` = its frame. Tool activity is shown LIVE on tool_start
@@ -43,11 +46,17 @@ export function useLiveSession(chatId: string) {
   const stopReveal = () => { if (revealRaf.current != null) { cancelAnimationFrame(revealRaf.current); revealRaf.current = null; } };
   const resetTranscript = () => { stopReveal(); segText.current = ""; curChunk.current = null; };
 
+  const stopObserveLoop = () => {
+    if (observeTimer.current) { clearInterval(observeTimer.current); observeTimer.current = null; }
+    observeInFlight.current = false;
+  };
+
   // ── single teardown authority — releases EVERYTHING, always ───────────────
   const teardown = useCallback(() => {
     if (tornDown.current) return;
     tornDown.current = true;
     stopReveal();
+    stopObserveLoop();
     window.removeEventListener("pagehide", onPageHide.current);
     try { client.current?.close(); } catch { /* */ }
     try { engine.current?.stop(); } catch { /* */ }              // destroys VAD + closes audio
@@ -61,12 +70,49 @@ export function useLiveSession(chatId: string) {
     // tab's lifetime so reopening Live is instant (no re-download / shader recompile).
     client.current = null; engine.current = null; camRef.current = null; screenRef.current = null;
     // Keep `error` so the user sees why it ended; start() clears it next time.
-    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, cameraStream: null, screenStream: null, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", warming: false });
+    // Keep lobby Study Tutor prefs (sessionMode / studyGoal / interruptLevel).
+    set({ active: false, phase: "off", downloading: false, downloadPct: 0, cameraOn: false, screenOn: false, muted: false, cameraStream: null, screenStream: null, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", warming: false, tutorStatus: "" });
   }, [chatId, set]);
+
+  const captureActiveFrames = useCallback(async () => {
+    const st0 = useLiveStore.getState();
+    const frames: { data: string; mime: string; source: "camera" | "screen" }[] = [];
+    if (st0.cameraOn && camRef.current) { const j = await camRef.current.captureFreshest(); if (j) frames.push({ data: abToBase64(j), mime: "image/jpeg", source: "camera" }); }
+    if (st0.screenOn && screenRef.current) { const j = await screenRef.current.captureFreshest(); if (j) frames.push({ data: abToBase64(j), mime: "image/jpeg", source: "screen" }); }
+    return frames;
+  }, []);
+
+  const tickObserve = useCallback(async () => {
+    const st = useLiveStore.getState();
+    if (tornDown.current || !client.current?.ready) return;
+    if (st.sessionMode !== "study_tutor") return;
+    if (!st.screenOn && !st.cameraOn) return;
+    // Don't peek while the student is talking / the tutor is mid-reply.
+    if (st.phase === "listening" || st.phase === "thinking" || st.phase === "speaking") return;
+    if (observeInFlight.current) return;
+    observeInFlight.current = true;
+    try {
+      const frames = await captureActiveFrames();
+      if (!frames.length || tornDown.current) return;
+      client.current?.observe(frames);
+    } finally {
+      observeInFlight.current = false;
+    }
+  }, [captureActiveFrames]);
+
+  const startObserveLoop = useCallback(() => {
+    stopObserveLoop();
+    const st = useLiveStore.getState();
+    if (st.sessionMode !== "study_tutor") return;
+    const ms = observeIntervalMs(st.interruptLevel);
+    // First peek after a short settle so screen share + warm-up can finish.
+    setTimeout(() => { if (!tornDown.current) void tickObserve(); }, Math.min(ms, 2500));
+    observeTimer.current = setInterval(() => { void tickObserve(); }, ms);
+  }, [tickObserve]);
 
   const start = useCallback(async () => {
     tornDown.current = false;
-    set({ error: undefined, phase: "connecting", active: true, downloadPct: 0, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "" });
+    set({ error: undefined, phase: "connecting", active: true, downloadPct: 0, userCaption: "", userPartial: false, agentCaption: "", toolStatus: "", tutorStatus: "" });
     // Unlock audio NOW, synchronously inside the click gesture. iOS Safari blocks
     // AudioContext playback that starts after an await, so priming here (before the
     // model download) is what lets the agent's voice actually play on iPhone.
@@ -98,7 +144,7 @@ export function useLiveSession(chatId: string) {
         // chat transcript, which types this chunk word-by-word in lockstep with the
         // audio so the panel shows exactly what's been said (honest on barge-in).
         onAgentText: (sentence, durationMs) => {
-          set({ agentCaption: sentence, agentCaptionMs: durationMs });
+          set({ agentCaption: sentence, agentCaptionMs: durationMs, tutorStatus: "" });
           const id = assistantId.current;
           // The previous chunk's audio has finished (this one is now playing) — commit
           // it into the current segment.
@@ -146,18 +192,45 @@ export function useLiveSession(chatId: string) {
       //    more optimistic "Listening" that lies when the connection never lands.
       set({ phase: "connecting" });
       const c = new LiveClient({
-        onOpen: () => set({ phase: "idle", error: undefined, warming: true }),
+        onOpen: () => {
+          const st = useLiveStore.getState();
+          c.sessionConfig({
+            mode: st.sessionMode,
+            studyGoal: st.studyGoal || undefined,
+            interruptLevel: st.interruptLevel,
+          });
+          set({ phase: "idle", error: undefined, warming: true, tutorStatus: st.sessionMode === "study_tutor" ? "watching" : "" });
+          startObserveLoop();
+        },
         onReconnecting: () => set({ phase: "reconnecting" }),
         onClose: () => teardown(),
         onError: (m) => set({ error: m }),
         onSse: (e) => {
           if (e.type === "error") { set({ error: e.message }); return; }
-          // Warm-up done → drop the "Warming up…" spinner; the first turn is now hot.
-          if (e.type === "status") { if (e.text === "ready") set({ warming: false }); return; }
+          // Warm-up / Study Tutor status cues.
+          if (e.type === "status") {
+            if (e.text === "ready" || e.text === "tutor_ready") set({ warming: false });
+            if (e.text === "watching") set({ tutorStatus: "watching", warming: false });
+            if (e.text === "observing") {
+              // Start a fresh transcript node for the next proactive spoken turn.
+              if (assistantId.current) { chatStore.liveFinish(chatId, assistantId.current); assistantId.current = null; }
+              resetTranscript();
+              set({ tutorStatus: "observing", warming: false });
+            }
+            return;
+          }
           // Prose text drives the VOICE only; the chat transcript is filled word-by-word
           // as each chunk is spoken (onAgentText), NOT from the generated stream (which
           // races ahead) — so an interrupt leaves the panel showing only what was said.
-          if (e.type === "text_delta") { engine.current?.feedAgentDelta(e.text); return; }
+          if (e.type === "text_delta") {
+            // Proactive observe may speak without a prior user_text — open a transcript turn.
+            if (!assistantId.current) {
+              resetTranscript();
+              assistantId.current = chatStore.liveUserTurn(chatId, "[watching your screen]");
+            }
+            engine.current?.feedAgentDelta(e.text);
+            return;
+          }
           // Reasoning streams into the transcript's work block (interleaved with tools).
           if (e.type === "reasoning_delta") { if (assistantId.current) chatStore.liveReason(chatId, assistantId.current, e.text); return; }
           if (e.type === "done") {
@@ -206,29 +279,35 @@ export function useLiveSession(chatId: string) {
       onPageHide.current = () => teardown();
       window.addEventListener("pagehide", onPageHide.current);
       await refreshDevices();
+
+      // Study Tutor works best with screen share — prompt immediately after connect.
+      if (useLiveStore.getState().sessionMode === "study_tutor" && !useLiveStore.getState().screenOn) {
+        // Fire-and-forget; user can cancel the picker.
+        void (async () => {
+          await new Promise((r) => setTimeout(r, 400));
+          if (!tornDown.current && !useLiveStore.getState().screenOn) await toggleScreen();
+        })();
+      }
     } catch (e: any) {
       const denied = e?.name === "NotAllowedError" || e?.name === "SecurityError";
       set({ error: denied ? "Microphone access denied. Allow the mic and try again." : `Couldn't start live mode: ${String(e?.message ?? e)}` });
       teardown();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId, set, teardown]);
+  }, [chatId, set, teardown, startObserveLoop]);
 
   // A completed user turn: attach the freshest camera frame, send the text, and
   // reflect the exchange in the chat store (so it renders + persists like typing).
   const handleUserText = useCallback(async (text: string) => {
     // Attach the freshest frame from every active visual source (camera + screen
     // can both be on), inline with the turn so the model sees exactly this moment.
-    const st0 = useLiveStore.getState();
-    const frames: { data: string; mime: string; source: "camera" | "screen" }[] = [];
-    if (st0.cameraOn && camRef.current) { const j = await camRef.current.captureFreshest(); if (j) frames.push({ data: abToBase64(j), mime: "image/jpeg", source: "camera" }); }
-    if (st0.screenOn && screenRef.current) { const j = await screenRef.current.captureFreshest(); if (j) frames.push({ data: abToBase64(j), mime: "image/jpeg", source: "screen" }); }
+    const frames = await captureActiveFrames();
     client.current?.userText(text, frames);
-    set({ userCaption: "", userPartial: false, agentCaption: "" });
+    set({ userCaption: "", userPartial: false, agentCaption: "", tutorStatus: "" });
     if (assistantId.current) chatStore.liveFinish(chatId, assistantId.current);
     resetTranscript(); // new turn → the word reveal starts fresh (don't carry prior spoken text)
     assistantId.current = chatStore.liveUserTurn(chatId, text);
-  }, [chatId, set]);
+  }, [captureActiveFrames, chatId, set]);
 
   // Explicit, user-initiated model download (pre-call). Nothing downloads until
   // the user asks — and because the worker stays warm, this only happens once.

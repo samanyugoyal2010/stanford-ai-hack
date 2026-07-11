@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, Video, VideoOff } from "lucide-react";
 import type { DeviceOpt } from "@/lib/live/liveStore";
+import { useLiveStore } from "@/lib/live/liveStore";
 import type { ModelProgress } from "@/lib/live/models";
 import { hasWebGPU } from "@/lib/live/models";
 import { ModelQuickPick } from "./ModelQuickPick";
@@ -63,12 +64,22 @@ export function PreCall({ mics, cams, micId, camId, onMic, onCam, error, modelsD
   downloadLoaded: number; downloadTotal: number; downloadModels: ModelProgress[];
   refreshDevices: () => Promise<void>; onDownload: () => void; onStart: () => void; onOpenSettings: () => void;
 }) {
+  const sessionMode = useLiveStore((s) => s.sessionMode);
+  const studyGoal = useLiveStore((s) => s.studyGoal);
+  const interruptLevel = useLiveStore((s) => s.interruptLevel);
+  const set = useLiveStore((s) => s.set);
+  const isTutor = sessionMode === "study_tutor";
+
   return (
     <div className="relative z-10 flex flex-1 flex-col overflow-y-auto">
       <div className="m-auto flex w-full max-w-sm flex-col items-center gap-4 px-6 py-6 text-center">
         <div className="space-y-1">
-          <h2 className="text-[18px] font-semibold tracking-tight">Talk with OpenLive</h2>
-          <p className="max-w-sm text-[13px] text-muted-foreground">It listens as you speak, answers out loud, and can see through your camera. The voice runs privately on your device.</p>
+          <h2 className="text-[18px] font-semibold tracking-tight">{isTutor ? "Study Tutor" : "Talk with OpenLive"}</h2>
+          <p className="max-w-sm text-[13px] text-muted-foreground">
+            {isTutor
+              ? "Share your screen while you study. Your local tutor watches, stays quiet when you’re progressing, and speaks up with short hints when you’re stuck."
+              : "It listens as you speak, answers out loud, and can see through your camera. The voice runs privately on your device."}
+          </p>
           {typeof navigator !== "undefined" && !hasWebGPU() && (
             <p className="mx-auto max-w-xs rounded-lg border border-arc/30 bg-arc/10 px-2.5 py-1.5 text-[11.5px] text-arc">
               Running voice on CPU — WebGPU isn&apos;t available, so responses will be slower.
@@ -76,12 +87,60 @@ export function PreCall({ mics, cams, micId, camId, onMic, onCam, error, modelsD
           )}
         </div>
 
-        <CameraPreview camId={camId} onGranted={refreshDevices} />
+        <div className="flex w-full max-w-xs rounded-xl border border-border bg-surface p-1">
+          {([
+            { id: "study_tutor" as const, label: "Study Tutor" },
+            { id: "assistant" as const, label: "Assistant" },
+          ]).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => set({ sessionMode: opt.id })}
+              className={cn(
+                "flex-1 rounded-lg px-3 py-1.5 text-[12px] font-medium transition",
+                sessionMode === opt.id ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {isTutor && (
+          <div className="w-full max-w-xs space-y-3 text-left">
+            <label className="block space-y-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Study goal</span>
+              <input
+                value={studyGoal}
+                onChange={(e) => set({ studyGoal: e.target.value })}
+                placeholder="e.g. AP Chem chapter 4, calc integrals"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-faint"
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">How often to speak up</span>
+              <select
+                value={interruptLevel}
+                onChange={(e) => set({ interruptLevel: e.target.value as "quiet" | "balanced" | "active" })}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground"
+              >
+                <option value="quiet">Quiet — only when clearly stuck</option>
+                <option value="balanced">Balanced — hints when progress stalls</option>
+                <option value="active">Active — check in more often</option>
+              </select>
+            </label>
+            <p className="text-[11px] leading-relaxed text-faint">
+              Uses local Ollama by default (<span className="text-muted-foreground">qwen2.5vl:7b</span>). Screen share starts when you begin.
+            </p>
+          </div>
+        )}
+
+        {!isTutor && <CameraPreview camId={camId} onGranted={refreshDevices} />}
         <MicMeter micId={micId} onGranted={refreshDevices} />
 
         <div className="w-full max-w-xs space-y-2">
           <DeviceSelect icon={Mic} opts={mics} value={micId} onChange={onMic} />
-          <DeviceSelect icon={Video} opts={cams} value={camId} onChange={onCam} />
+          {!isTutor && <DeviceSelect icon={Video} opts={cams} value={camId} onChange={onCam} />}
         </div>
 
         <ModelQuickPick onOpenSettings={onOpenSettings} />
@@ -100,7 +159,7 @@ export function PreCall({ mics, cams, micId, camId, onMic, onCam, error, modelsD
           </div>
         ) : (
           <button onClick={onStart} className="rounded-full bg-accent px-7 py-2.5 text-[14px] font-medium text-accent-foreground transition duration-150 hover:scale-[1.03] hover:opacity-90 active:scale-95">
-            Start
+            {isTutor ? "Start studying" : "Start"}
           </button>
         )}
         {error && <p className="max-w-sm text-[12px] text-danger">{error}</p>}

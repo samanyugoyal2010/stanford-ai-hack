@@ -1,8 +1,9 @@
 {
-  "name": "openlive",
+  "name": "openlive-study-tutor",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "OpenLive fork — Study Tutor with local Ollama vision",
   "packageManager": "pnpm@11.5.2",
   "engines": {
     "node": ">=22.13"
@@ -14,7 +15,7 @@
     "build": "pnpm -r --filter @openlive/web build",
     "db:reset": "pnpm --filter @openlive/db reset",
     "typecheck": "pnpm -r typecheck",
-    "desktop:dev": "AGENT_PORT=47823 WEB_PORT=47824 concurrently -k --kill-others -n web,agent,app -c cyan,magenta,green \"pnpm --filter @openlive/web dev\" \"pnpm --filter @openlive/agent dev\" \"pnpm --filter @openlive/desktop start:dev\"",
+    "desktop:dev": "env -u ELECTRON_RUN_AS_NODE AGENT_PORT=47823 WEB_PORT=47824 concurrently -k --kill-others -n web,agent,app -c cyan,magenta,green \"pnpm --filter @openlive/web dev\" \"pnpm --filter @openlive/agent dev\" \"pnpm --filter @openlive/desktop start:dev\"",
     "desktop:build": "pnpm --filter @openlive/desktop build",
     "desktop:build:mac": "pnpm --filter @openlive/desktop build:mac",
     "desktop:build:win": "pnpm --filter @openlive/desktop build:win"
