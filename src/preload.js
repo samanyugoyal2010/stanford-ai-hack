@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('lunar', {
   scene: (payload) => ipcRenderer.invoke('ollama-scene', payload),
   pickImage: () => ipcRenderer.invoke('pick-image'),
   readImage: (filePath) => ipcRenderer.invoke('read-image', filePath)
+  ,fetchAccurateModel: () => ipcRenderer.invoke('fetch-accurate-model')
 });
