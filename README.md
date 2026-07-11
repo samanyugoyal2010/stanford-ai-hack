@@ -1,26 +1,40 @@
-# OpenLive Study Tutor (Ollama)
+# Nudge
 
-Fork of [OpenLive](https://github.com/katipally/openlive) with a **Study Tutor** mode: a live voice tutor that watches your screen while you study, stays quiet when you’re progressing, and speaks up with short Socratic hints when you’re stuck.
+The quiet tutor that teaches you to think.
 
-The voice loop (VAD / Whisper / Kokoro) still runs on-device. The brain defaults to **local Ollama** — nothing leaves your machine except HTTP to `localhost:11434`.
+Fork of [OpenLive](https://github.com/katipally/openlive): a live voice tutor that watches your screen while you study, stays quiet when you’re progressing, and speaks up with short Socratic hints when you’re stuck.
+
+Voice (VAD / Whisper / Kokoro) runs on-device. The brain uses **two local Ollama models**:
+
+| Role | Default model | Job |
+|------|---------------|-----|
+| **Talk** | `gemma4:e2b-it-qat` | Fast spoken replies (no big image prefill) |
+| **Eyes** | `qwen2.5vl:7b` | Screen observe + cached summaries |
 
 ## Prerequisites
 
 1. **Node.js** ≥ 22.13 and **pnpm** 11
 2. **[Ollama](https://ollama.com)** installed and running
-3. Pull a vision model (recommended):
+3. Pull both models:
 
 ```bash
-ollama pull qwen2.5vl:7b
+ollama pull gemma4:e2b-it-qat   # fast talk
+ollama pull qwen2.5vl:7b       # vision eyes
 ```
 
-On a tighter machine:
+Talk fallback if Gemma isn’t available:
+
+```bash
+ollama pull llama3.2
+```
+
+Lighter eyes:
 
 ```bash
 ollama pull qwen2.5vl:3b
 ```
 
-4. **macOS screen recording permission** for Electron / your browser when sharing a window or display (System Settings → Privacy & Security → Screen Recording).
+4. **macOS screen recording permission** for Electron (System Settings → Privacy & Security → Screen Recording).
 
 ## Run
 
@@ -31,41 +45,31 @@ pnpm desktop:dev      # Electron + local web + agent (ports 47824 / 47823)
 pnpm dev              # then open http://localhost:3000
 ```
 
-## Use Study Tutor
+## Use Nudge
 
-1. Open the app → start a **New** live call.
-2. Leave mode on **Study Tutor** (default).
-3. Set an optional **study goal** (e.g. `AP Chem chapter 4`) and how often to speak up (Quiet / Balanced / Active).
-4. Confirm the model picker shows **Ollama (local)** + `qwen2.5vl:7b` (Settings defaults to this).
-5. Download on-device voice models once if prompted, then **Start studying**.
-6. Allow **screen share** when prompted — pick the PDF, notes, or worksheet window.
-7. Study normally. Status shows **Watching · quiet** or **Watching your work…**. Ask questions out loud anytime (“am I doing this right?”).
+1. Open the app → **New** live call.
+2. Set an optional **study goal** and how often to speak up.
+3. Confirm Settings: Talk = `gemma4:e2b-it-qat`, Eyes (vision) = `qwen2.5vl:7b`.
+4. Download on-device voice models once if prompted → **Start studying**.
+5. Allow **screen share** — pick your PDF / notes / worksheet.
+6. The window shrinks to a **floating sphere** (top-right, always on top). Study normally; click the sphere to open the full UI; minimize to return to the sphere.
+7. Ask questions out loud anytime (“am I doing this right?”).
 
-Switch to **Assistant** in the lobby for classic OpenLive reactive chat without the proactive observe loop.
-
-## How the tutor adapts
+## How it stays fast
 
 ```
-screen frames ──▶ observe loop (every ~4–10s) ──▶ Ollama vision model
-                         │
-                         ├─ SILENCE → stay quiet
-                         └─ short hint / question → on-device TTS
+screen ──▶ observe (qwen2.5vl, small JPEG) ──▶ SUMMARY cache + optional short SPEAK
+mic    ──▶ talk (gemma4) + cached SUMMARY ──▶ on-device TTS
 ```
 
-- **Quiet / Balanced / Active** control how often proactive peeks can become spoken interventions.
-- Server rate-limits spoken interventions (cooldown + max per minute).
-- Prefer Socratic questions over full answers; use `remember` for lasting misconceptions.
+Spoken turns do **not** re-send full screen frames to the vision model every time.
 
-## Defaults
+## Sphere UX
 
-| Setting | Value |
-|---------|--------|
-| Provider | `ollama` (`http://localhost:11434/v1`) |
-| Live model | `qwen2.5vl:7b` |
-| Session mode | Study Tutor |
-
-Change provider/model anytime in Settings or the lobby quick-pick.
+- After start: auto-collapse to a ~64px always-on-top orb
+- **Click orb** → full Nudge interface
+- **Minimize** in the full UI → back to the orb
 
 ## Upstream OpenLive
 
-Voice + vision plumbing, desktop shell, and BYO providers come from OpenLive (MIT). This fork adds Study Tutor session config, proactive `observe` turns, education prompts, and Ollama-first defaults.
+Voice + vision plumbing and desktop shell come from OpenLive (MIT). This product rebrands as Nudge: quiet screen tutoring, dual Ollama Talk/Eyes defaults, and the floating sphere.

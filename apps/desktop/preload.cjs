@@ -5,12 +5,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("openlive", {
-  // Enter minimized mode: shrink to a small floating pill (always-on-top).
+  // Enter minimized mode: shrink to a tiny floating sphere (always-on-top).
   mini: () => ipcRenderer.send("openlive:mini"),
   // Restore the normal window.
   unmini: () => ipcRenderer.send("openlive:unmini"),
-  // Resize the pill to fit its content (previews stack inline above the pill and it
-  // grows upward). The renderer measures its own height and passes it here.
+  // Kept for compatibility; sphere mode ignores content height.
   miniSize: (h) => ipcRenderer.send("openlive:mini-size", h),
   // Custom window controls — the window is frameless (no native traffic lights).
   winClose: () => ipcRenderer.send("openlive:win-close"),

@@ -33,7 +33,7 @@ export interface InCallProps {
 export function InCall(props: InCallProps) {
   const { chatId, phase, muted, cameraOn, screenOn, cameraStream, screenStream, error,
     toggleMute, toggleCamera, toggleScreen, setMic, setCam, getLevels, getBands, onEnd } = props;
-  const { userCaption, userPartial, agentCaption, agentCaptionMs, toolStatus, warming, tutorStatus, sessionMode, mics, cams, micId, camId } = useLiveStore();
+  const { userCaption, userPartial, agentCaption, agentCaptionMs, toolStatus, warming, tutorStatus, mics, cams, micId, camId } = useLiveStore();
   const setMinimized = useUi((s) => s.setMinimized);
   const reduce = useReducedMotion();
   const sharing = cameraOn || screenOn; // orb shrinks into the bar while a visual source is on
@@ -74,9 +74,9 @@ export function InCall(props: InCallProps) {
       : null;
 
   // Status line: tool cue, tutor watch/observe, warm-up, or phase label.
-  const tutorLabel = sessionMode === "study_tutor" && tutorStatus === "observing"
+  const tutorLabel = tutorStatus === "observing"
     ? "Watching your work…"
-    : sessionMode === "study_tutor" && tutorStatus === "watching" && phase === "idle"
+    : tutorStatus === "watching" && phase === "idle"
       ? "Watching · quiet"
       : "";
   const statusLabel = toolStatus ? `${toolMeta(toolStatus).active}…` : warming ? "Warming up…" : tutorLabel || PHASE_LABEL[phase];
@@ -128,7 +128,7 @@ export function InCall(props: InCallProps) {
               devices={cams} activeId={camId} onPick={setCam} label="Camera" />
             <IconBtn on={screenOn} title={screenOn ? "Stop sharing screen" : "Share screen"} onClick={() => void toggleScreen()} icon={screenOn ? ScreenShareOff : ScreenShare} />
             <span className="mx-0.5 h-5 w-px bg-border" />
-            <IconBtn on={false} title="Minimize to floating bar" onClick={() => setMinimized(true)} icon={Minimize2} />
+            <IconBtn on={false} title="Back to floating sphere" onClick={() => setMinimized(true)} icon={Minimize2} />
             <EndCallButton onEnd={onEnd} />
           </div>
         </main>

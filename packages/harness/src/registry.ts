@@ -164,7 +164,7 @@ export const MODEL_SNAPSHOT: Record<string, string[]> = {
   // ponytail: guesses so the picker has a default before /v1/models loads. Local
   // depends on what you've pulled; cloud ids carry the `-cloud` suffix. Live fetch
   // corrects both the moment the server/key is reachable.
-  ollama: ["qwen2.5vl:7b", "qwen2.5vl:3b", "llama3.2-vision", "llama3.2", "qwen3", "gemma3"],
+  ollama: ["gemma4:e2b-it-qat", "llama3.2", "qwen2.5vl:7b", "qwen2.5vl:3b", "llama3.2-vision", "qwen3", "gemma3"],
   "ollama-cloud": ["gpt-oss:120b-cloud", "qwen3-coder:480b-cloud", "deepseek-v3.1:671b-cloud"],
   // ponytail: one sane default each so chat works pre-live-fetch; the picker
   // fills the real list from /v1/models. Ids drift — treat as seeds, not truth.

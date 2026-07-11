@@ -33,7 +33,7 @@ export class CameraCapture {
   /** Share a screen / window / tab. `onEnded` fires if the user stops sharing
    *  from the OS/browser chrome (the "Stop sharing" bar). */
   async startScreen(onEnded?: () => void) {
-    this.sampleSize = 1100; // screens carry small text — sample larger than the camera
+    this.sampleSize = 720; // smaller than before — VL prefill is the latency bottleneck
     this.stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 3 } }, audio: false });
     this.video.srcObject = this.stream;
     await this.video.play();
@@ -47,7 +47,7 @@ export class CameraCapture {
     void this.sample(); // seed one immediately
   }
   private async sample() {
-    const buf = await this.grab(this.sampleSize, 0.72);
+    const buf = await this.grab(this.sampleSize, this.sampleSize > 800 ? 0.72 : 0.55);
     if (!buf) return;
     this.buffer.push(buf);
     if (this.buffer.length > CameraCapture.BUFFER) this.buffer.shift();
@@ -55,7 +55,8 @@ export class CameraCapture {
 
   /** The latest sampled frame (attached to each turn). */
   async captureFreshest(): Promise<ArrayBuffer | null> {
-    return this.buffer[this.buffer.length - 1] ?? this.grab(this.sampleSize, 0.72);
+    const q = this.sampleSize > 800 ? 0.72 : 0.55;
+    return this.buffer[this.buffer.length - 1] ?? this.grab(this.sampleSize, q);
   }
   recent(n = 2): ArrayBuffer[] {
     return this.buffer.slice(-Math.max(1, n));

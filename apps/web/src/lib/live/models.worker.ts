@@ -85,7 +85,7 @@ self.onmessage = async (e: MessageEvent) => {
       } catch (err) { console.warn("[live] Smart-Turn unavailable:", err); turnSession = null; turnProc = null; }
       // Warm up (compiles WebGPU shaders) so the first real turn isn't janky.
       try { await asr(new Float32Array(16000)); } catch { /* */ }
-      try { await tts.generate("Hi.", { voice: VOICE }); } catch { /* */ }
+      try { await tts.generate("Hi.", { voice: VOICE, speed: 1 }); } catch { /* */ }
       if (turnSession && turnProc) { try { await turnComplete(new Float32Array(16000)); } catch { /* */ } }
       post({ type: "ready", turn: !!(turnSession && turnProc) });
     } else if (msg.type === "stt") {
@@ -93,7 +93,7 @@ self.onmessage = async (e: MessageEvent) => {
       post({ type: "result", id: msg.id, text });
     } else if (msg.type === "tts") {
       const { audio, sampleRate } = await serial(async () => {
-        const a = await tts.generate(msg.text, { voice: VOICE });
+        const a = await tts.generate(msg.text, { voice: VOICE, speed: 1 });
         return { audio: a.audio as Float32Array, sampleRate: a.sampling_rate as number };
       });
       post({ type: "result", id: msg.id, audio, sampleRate }, [audio.buffer]);

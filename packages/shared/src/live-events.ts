@@ -31,10 +31,6 @@ export const liveServerMsgSchema = z.discriminatedUnion("t", [
 ]);
 export type LiveServerMsg = z.infer<typeof liveServerMsgSchema>;
 
-/** Live session persona — Study Tutor watches the screen and guides studying. */
-export const liveSessionModeSchema = z.enum(["assistant", "study_tutor"]);
-export type LiveSessionMode = z.infer<typeof liveSessionModeSchema>;
-
 /** How often the Study Tutor may speak up unprompted. */
 export const interruptLevelSchema = z.enum(["quiet", "balanced", "active"]);
 export type InterruptLevel = z.infer<typeof interruptLevelSchema>;
@@ -57,10 +53,11 @@ export const liveClientMsgSchema = z.discriminatedUnion("t", [
     text: z.string(),
     frames: z.array(turnFrameSchema).optional(),
   }),
-  // Study Tutor: configure mode / goal / interrupt policy (sent right after connect).
+  // Configure study goal / interrupt policy (sent right after connect).
+  // `mode` is accepted but ignored for backward compatibility with older clients.
   z.object({
     t: z.literal("session_config"),
-    mode: liveSessionModeSchema.default("assistant"),
+    mode: z.string().optional(),
     studyGoal: z.string().optional(),
     interruptLevel: interruptLevelSchema.optional(),
   }),

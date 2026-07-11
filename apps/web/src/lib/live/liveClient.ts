@@ -83,7 +83,6 @@ export class LiveClient {
     this.sendJson({ t: "user_text", text, ...(frames && frames.length ? { frames } : {}) });
   }
   sessionConfig(cfg: {
-    mode: "assistant" | "study_tutor";
     studyGoal?: string;
     interruptLevel?: "quiet" | "balanced" | "active";
   }) {

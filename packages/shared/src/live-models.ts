@@ -25,9 +25,10 @@ export const LIVE_MODEL_RECS: Record<string, LiveModelRec[]> = {
   ],
   // Local Study Tutor default — vision + chat in one Ollama model.
   ollama: [
-    { model: "qwen2.5vl:7b", label: "Qwen2.5-VL 7B", note: "local vision tutor — sees your screen, no cloud", vision: true, default: true },
-    { model: "qwen2.5vl:3b", label: "Qwen2.5-VL 3B", note: "lighter local vision if 7B is tight", vision: true },
-    { model: "llama3.2-vision", label: "Llama 3.2 Vision", note: "local multimodal alternative", vision: true },
+    { model: "gemma4:e2b-it-qat", label: "Gemma 4 (talk)", note: "fast local talk model — use with Qwen VL eyes", vision: false, default: true },
+    { model: "llama3.2", label: "Llama 3.2", note: "fast local talk fallback", vision: false },
+    { model: "qwen2.5vl:7b", label: "Qwen2.5-VL 7B", note: "vision eyes — prefer as separate vision model", vision: true },
+    { model: "qwen2.5vl:3b", label: "Qwen2.5-VL 3B", note: "lighter vision eyes", vision: true },
   ],
 };
 

@@ -78,7 +78,7 @@ function spawnServer(name, scriptRel, env) {
     const r = (restarts[name] ||= { count: 0, first: Date.now() });
     if (Date.now() - r.first > 60000) { r.count = 0; r.first = Date.now(); } // reset the window
     if (++r.count > 5) {
-      dialog.showErrorBox("OpenLive stopped", `The ${name} service keeps crashing. Please relaunch the app.`);
+      dialog.showErrorBox("Nudge stopped", `The ${name} service keeps crashing. Please relaunch the app.`);
       return;
     }
     setTimeout(() => { if (!app.isQuitting) spawnServer(name, scriptRel, env); }, 500);
@@ -201,41 +201,40 @@ function createMainWindow() {
   mainWin.on("closed", () => { mainWin = null; });
 }
 
-// ── minimized (floating pill) mode ───────────────────────────────────────────
-// Mini mode shrinks the SINGLE main window to a small floating pill that still runs
-// the whole voice pipeline AND owns the camera/screen streams — so the renderer
-// shows the previews INLINE (stacked above the pill) with no separate windows. The
-// pill grows UPWARD as previews appear (its bottom edge stays put). Opaque,
+// ── minimized (floating sphere) mode ─────────────────────────────────────────
+// Mini mode shrinks the SINGLE main window to a tiny always-on-top orb. Click the
+// orb in the renderer to expand back to the full Study Tutor UI. Opaque,
 // always-on-top; macOS rounds the frameless window natively.
-const PILL_W = 430, PILL_H = 56;
+const SPHERE = 64;
 let savedBounds = null;
 
 function miniDisplay() {
   return screen.getDisplayMatching(savedBounds || (mainWin ? mainWin.getBounds() : { x: 0, y: 0, width: 0, height: 0 }));
 }
-function pillBottom(area) { return area.y + area.height - 72; } // clear the dock
 
 function wireMiniIpc() {
   ipcMain.on("openlive:mini", () => {
     if (!mainWin) return;
-    const applyPill = () => {
+    const applySphere = () => {
       if (!mainWin) return;
       if (!savedBounds) savedBounds = mainWin.getBounds();
       const area = miniDisplay().workArea;
       mainWin.setResizable(false);
-      mainWin.setMinimumSize(PILL_W, PILL_H);
-      mainWin.setBounds({ width: PILL_W, height: PILL_H, x: area.x + Math.round((area.width - PILL_W) / 2), y: pillBottom(area) - PILL_H });
+      mainWin.setMinimumSize(SPHERE, SPHERE);
+      const x = area.x + area.width - SPHERE - 24;
+      const y = area.y + 24;
+      mainWin.setBounds({ width: SPHERE, height: SPHERE, x, y });
       mainWin.setAlwaysOnTop(true, "floating");
       mainWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     };
     // A fullscreen (or simple-fullscreen) window ignores setBounds — leave it first,
-    // then shrink to the pill once the OS transition completes.
+    // then shrink once the OS transition completes.
     if (mainWin.isFullScreen() || mainWin.isSimpleFullScreen()) {
-      mainWin.once("leave-full-screen", applyPill);
+      mainWin.once("leave-full-screen", applySphere);
       mainWin.setFullScreen(false);
     } else {
       if (mainWin.isMaximized()) mainWin.unmaximize();
-      applyPill();
+      applySphere();
     }
   });
   ipcMain.on("openlive:unmini", () => {
@@ -246,20 +245,12 @@ function wireMiniIpc() {
     mainWin.setMinimumSize(940, 640);
     if (savedBounds) { mainWin.setBounds(savedBounds); savedBounds = null; }
   });
-  // The pill fits its content: the renderer measures the stacked previews + pill and
-  // asks for a height. Grow UPWARD — keep the bottom edge fixed so the pill doesn't
-  // walk up/down the screen as previews toggle.
-  ipcMain.on("openlive:mini-size", (_e, h) => {
+  // Sphere stays fixed size; ignore height resize requests from older pill UI.
+  ipcMain.on("openlive:mini-size", () => {
     if (!mainWin || !mainWin.isAlwaysOnTop()) return;
-    const area = miniDisplay().workArea;
-    // Fit the content snugly (down to ~a bare pill); don't force the full PILL_H so
-    // there's no empty strip above the composer.
-    const height = Math.max(44, Math.min(area.height - 96, Math.round(h) || PILL_H));
     const b = mainWin.getBounds();
-    if (height === b.height) return;
-    const bottom = b.y + b.height;
-    const y = Math.max(area.y + 8, bottom - height);
-    mainWin.setBounds({ x: b.x, y, width: PILL_W, height }, true); // animate the grow (mac)
+    if (b.width === SPHERE && b.height === SPHERE) return;
+    mainWin.setBounds({ x: b.x, y: b.y, width: SPHERE, height: SPHERE }, true);
   });
 }
 
@@ -297,7 +288,7 @@ function buildMenu() {
   const openSettings = () => mainWin && mainWin.webContents.send("openlive:open-settings");
   const template = [
     ...(isMac ? [{ role: "appMenu", submenu: [
-      { role: "about", label: "About OpenLive" },
+      { role: "about", label: "About Nudge" },
       { label: "Check for Updates…", click: checkForUpdatesNow },
       { type: "separator" },
       { label: "Settings…", accelerator: "CmdOrCtrl+,", click: openSettings },
@@ -311,14 +302,14 @@ function buildMenu() {
     { role: "viewMenu" },
     { role: "windowMenu" },
     { role: "help", submenu: [
-      { label: "OpenLive on GitHub", click: () => shell.openExternal("https://github.com/katipally/openlive") },
+      { label: "Nudge on GitHub", click: () => shell.openExternal("https://github.com/katipally/openlive") },
       ...(isMac ? [] : [{ label: "Check for Updates…", click: checkForUpdatesNow },
                         { label: "Settings", accelerator: "CmdOrCtrl+,", click: openSettings },
-                        { type: "separator" }, { role: "about", label: "About OpenLive" }]),
+                        { type: "separator" }, { role: "about", label: "About Nudge" }]),
     ] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
-  app.setAboutPanelOptions({ applicationName: "OpenLive", applicationVersion: app.getVersion(), copyright: "© OpenLive" });
+  app.setAboutPanelOptions({ applicationName: "Nudge", applicationVersion: app.getVersion(), copyright: "© Nudge" });
 }
 
 // ── auto-update (packaged prod only; needs the published latest*.yml) ─────────
@@ -339,13 +330,13 @@ function initAutoUpdate() {
   updater.on("update-available", (i) => console.log("[updater] update available:", i?.version));
   updater.on("update-not-available", () => {
     console.log("[updater] up to date");
-    if (manualCheck) { manualCheck = false; if (mainWin) dialog.showMessageBox(mainWin, { type: "info", message: "You're up to date", detail: `OpenLive ${app.getVersion()} is the latest version.` }); }
+    if (manualCheck) { manualCheck = false; if (mainWin) dialog.showMessageBox(mainWin, { type: "info", message: "You're up to date", detail: `Nudge ${app.getVersion()} is the latest version.` }); }
   });
   updater.on("download-progress", (p) => console.log(`[updater] downloading ${Math.round(p?.percent || 0)}%`));
   updater.on("update-downloaded", async ({ version }) => {
     const { response } = await dialog.showMessageBox(mainWin, {
       type: "info", buttons: ["Restart now", "Later"], defaultId: 0, cancelId: 1,
-      message: `OpenLive ${version} is ready`, detail: "Restart to finish updating.",
+      message: `Nudge ${version} is ready`, detail: "Restart to finish updating.",
     });
     if (response === 0) { app.isQuitting = true; updater.quitAndInstall(); }
   });
@@ -374,7 +365,7 @@ async function boot() {
   startServers();
   const ok = await waitForServers();
   if (!ok) {
-    dialog.showErrorBox("OpenLive couldn't start", `The local servers didn't come up. Try relaunching.`);
+    dialog.showErrorBox("Nudge couldn't start", `The local servers didn't come up. Try relaunching.`);
     app.quit();
     return;
   }

@@ -10,12 +10,28 @@ export const dynamic = "force-dynamic";
 const DEFAULTS = {
   liveEffort: "auto",
   liveProviderId: "ollama",
-  liveModel: "qwen2.5vl:7b",
+  liveModel: "gemma4:e2b-it-qat",
+  visionProviderId: "ollama",
+  visionModel: "qwen2.5vl:7b",
 };
 const KEYS = ["liveModel", "liveProviderId", "liveEffort", "visionProviderId", "visionModel"];
 
 export function GET() {
-  return NextResponse.json({ ...DEFAULTS, ...getAllSettings() });
+  const saved = getAllSettings() as Record<string, string>;
+  const out: Record<string, string> = { ...DEFAULTS, ...saved };
+  // Migrate older Study Tutor setups that used VL as the live talk model.
+  const live = out.liveModel ?? "";
+  if (/qwen2\.5vl|llava|vision/i.test(live) && !saved.visionModel) {
+    out.visionProviderId = out.visionProviderId || "ollama";
+    out.visionModel = live;
+    out.liveModel = DEFAULTS.liveModel;
+    setSetting("visionProviderId", out.visionProviderId);
+    setSetting("visionModel", out.visionModel);
+    setSetting("liveModel", out.liveModel);
+  }
+  if (!out.visionProviderId) out.visionProviderId = DEFAULTS.visionProviderId;
+  if (!out.visionModel) out.visionModel = DEFAULTS.visionModel;
+  return NextResponse.json(out);
 }
 
 export async function PUT(req: Request) {

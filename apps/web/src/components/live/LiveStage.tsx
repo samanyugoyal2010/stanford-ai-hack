@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Mic, Video, VideoOff } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Mic } from "lucide-react";
 import type { DeviceOpt } from "@/lib/live/liveStore";
 import { useLiveStore } from "@/lib/live/liveStore";
 import type { ModelProgress } from "@/lib/live/models";
@@ -9,8 +9,9 @@ import { hasWebGPU } from "@/lib/live/models";
 import { ModelQuickPick } from "./ModelQuickPick";
 import { cn } from "@/lib/cn";
 
-// The pre-call screen for Live voice: device pickers, a self-preview + mic meter,
-// and the on-device model download. The in-call UI lives in LiveDock/VoiceBar.
+// The pre-call screen for Live voice: device pickers, mic meter, study goal /
+// interrupt prefs, and the on-device model download. The in-call UI lives in
+// LiveDock/VoiceBar.
 
 const mb = (bytes: number) => (bytes / 1_048_576).toFixed(bytes >= 100 * 1_048_576 ? 0 : 1);
 const MODEL_ROLE: Record<string, string> = { stt: "hears you", tts: "speaks back", turn: "knows when you're done" };
@@ -57,28 +58,24 @@ function DeviceSelect({ icon: Icon, opts, value, onChange }: { icon: typeof Mic;
   );
 }
 
-export function PreCall({ mics, cams, micId, camId, onMic, onCam, error, modelsDownloaded, downloading, downloadPct, downloadLoaded, downloadTotal, downloadModels, refreshDevices, onDownload, onStart, onOpenSettings }: {
-  mics: DeviceOpt[]; cams: DeviceOpt[]; micId?: string; camId?: string;
-  onMic: (id: string) => void; onCam: (id: string) => void; error?: string;
+export function PreCall({ mics, micId, onMic, error, modelsDownloaded, downloading, downloadPct, downloadLoaded, downloadTotal, downloadModels, refreshDevices, onDownload, onStart, onOpenSettings }: {
+  mics: DeviceOpt[]; micId?: string;
+  onMic: (id: string) => void; error?: string;
   modelsDownloaded: boolean; downloading: boolean; downloadPct: number;
   downloadLoaded: number; downloadTotal: number; downloadModels: ModelProgress[];
   refreshDevices: () => Promise<void>; onDownload: () => void; onStart: () => void; onOpenSettings: () => void;
 }) {
-  const sessionMode = useLiveStore((s) => s.sessionMode);
   const studyGoal = useLiveStore((s) => s.studyGoal);
   const interruptLevel = useLiveStore((s) => s.interruptLevel);
   const set = useLiveStore((s) => s.set);
-  const isTutor = sessionMode === "study_tutor";
 
   return (
     <div className="relative z-10 flex flex-1 flex-col overflow-y-auto">
       <div className="m-auto flex w-full max-w-sm flex-col items-center gap-4 px-6 py-6 text-center">
         <div className="space-y-1">
-          <h2 className="text-[18px] font-semibold tracking-tight">{isTutor ? "Study Tutor" : "Talk with OpenLive"}</h2>
+          <h2 className="text-[18px] font-semibold tracking-tight">nudge</h2>
           <p className="max-w-sm text-[13px] text-muted-foreground">
-            {isTutor
-              ? "Share your screen while you study. Your local tutor watches, stays quiet when you’re progressing, and speaks up with short hints when you’re stuck."
-              : "It listens as you speak, answers out loud, and can see through your camera. The voice runs privately on your device."}
+            The quiet tutor that teaches you to think. Share your screen while you study — Nudge stays quiet when you’re progressing, and speaks up with short hints when you’re stuck.
           </p>
           {typeof navigator !== "undefined" && !hasWebGPU() && (
             <p className="mx-auto max-w-xs rounded-lg border border-arc/30 bg-arc/10 px-2.5 py-1.5 text-[11.5px] text-arc">
@@ -87,60 +84,37 @@ export function PreCall({ mics, cams, micId, camId, onMic, onCam, error, modelsD
           )}
         </div>
 
-        <div className="flex w-full max-w-xs rounded-xl border border-border bg-surface p-1">
-          {([
-            { id: "study_tutor" as const, label: "Study Tutor" },
-            { id: "assistant" as const, label: "Assistant" },
-          ]).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => set({ sessionMode: opt.id })}
-              className={cn(
-                "flex-1 rounded-lg px-3 py-1.5 text-[12px] font-medium transition",
-                sessionMode === opt.id ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
+        <div className="w-full max-w-xs space-y-3 text-left">
+          <label className="block space-y-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Study goal</span>
+            <input
+              value={studyGoal}
+              onChange={(e) => set({ studyGoal: e.target.value })}
+              placeholder="e.g. AP Chem chapter 4, calc integrals"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-faint"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">How often to speak up</span>
+            <select
+              value={interruptLevel}
+              onChange={(e) => set({ interruptLevel: e.target.value as "quiet" | "balanced" | "active" })}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground"
             >
-              {opt.label}
-            </button>
-          ))}
+              <option value="quiet">Quiet — only when clearly stuck</option>
+              <option value="balanced">Balanced — hints when progress stalls</option>
+              <option value="active">Active — check in more often</option>
+            </select>
+          </label>
+          <p className="text-[11px] leading-relaxed text-faint">
+            Talk: local <span className="text-muted-foreground">gemma4</span> · Eyes: <span className="text-muted-foreground">qwen2.5vl</span>. After start, a floating sphere stays on top — click it to open the full UI.
+          </p>
         </div>
 
-        {isTutor && (
-          <div className="w-full max-w-xs space-y-3 text-left">
-            <label className="block space-y-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Study goal</span>
-              <input
-                value={studyGoal}
-                onChange={(e) => set({ studyGoal: e.target.value })}
-                placeholder="e.g. AP Chem chapter 4, calc integrals"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground placeholder:text-faint"
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">How often to speak up</span>
-              <select
-                value={interruptLevel}
-                onChange={(e) => set({ interruptLevel: e.target.value as "quiet" | "balanced" | "active" })}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground"
-              >
-                <option value="quiet">Quiet — only when clearly stuck</option>
-                <option value="balanced">Balanced — hints when progress stalls</option>
-                <option value="active">Active — check in more often</option>
-              </select>
-            </label>
-            <p className="text-[11px] leading-relaxed text-faint">
-              Uses local Ollama by default (<span className="text-muted-foreground">qwen2.5vl:7b</span>). Screen share starts when you begin.
-            </p>
-          </div>
-        )}
-
-        {!isTutor && <CameraPreview camId={camId} onGranted={refreshDevices} />}
         <MicMeter micId={micId} onGranted={refreshDevices} />
 
         <div className="w-full max-w-xs space-y-2">
           <DeviceSelect icon={Mic} opts={mics} value={micId} onChange={onMic} />
-          {!isTutor && <DeviceSelect icon={Video} opts={cams} value={camId} onChange={onCam} />}
         </div>
 
         <ModelQuickPick onOpenSettings={onOpenSettings} />
@@ -159,43 +133,11 @@ export function PreCall({ mics, cams, micId, camId, onMic, onCam, error, modelsD
           </div>
         ) : (
           <button onClick={onStart} className="rounded-full bg-accent px-7 py-2.5 text-[14px] font-medium text-accent-foreground transition duration-150 hover:scale-[1.03] hover:opacity-90 active:scale-95">
-            {isTutor ? "Start studying" : "Start"}
+            Start studying
           </button>
         )}
         {error && <p className="max-w-sm text-[12px] text-danger">{error}</p>}
       </div>
-    </div>
-  );
-}
-
-// Live camera preview on the pre-call screen. Opens its OWN stream (separate from
-// the call) and releases it on unmount.
-function CameraPreview({ camId, onGranted }: { camId?: string; onGranted: () => void }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const [state, setState] = useState<"loading" | "on" | "denied">("loading");
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    let stopped = false;
-    setState("loading");
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: camId ? { deviceId: { exact: camId } } : true });
-        if (stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
-        if (ref.current) ref.current.srcObject = stream;
-        setState("on"); onGranted();
-      } catch { if (!stopped) setState("denied"); }
-    })();
-    return () => { stopped = true; stream?.getTracks().forEach((t) => t.stop()); };
-  }, [camId, onGranted]);
-  return (
-    <div className="relative aspect-[4/3] max-h-[36vh] w-full max-w-[16rem] overflow-hidden rounded-2xl border border-border/60 bg-black shadow-lg">
-      <video ref={ref} autoPlay muted playsInline className={cn("h-full w-full object-cover transition-opacity", state === "on" ? "opacity-100" : "opacity-0")} />
-      {state !== "on" && (
-        <div className="absolute inset-0 grid place-items-center gap-1 text-center">
-          <VideoOff className="size-6 text-muted-foreground" />
-          <p className="text-[11px] text-muted-foreground">{state === "denied" ? "Camera off or blocked" : "Starting camera…"}</p>
-        </div>
-      )}
     </div>
   );
 }
