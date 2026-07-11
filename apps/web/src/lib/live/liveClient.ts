@@ -93,9 +93,17 @@ export class LiveClient {
   }
   cancel(spoken?: string) { this.sendJson({ t: "cancel", ...(spoken ? { spoken } : {}) }); }
   control(action: "camera_on" | "camera_off" | "screen_on" | "screen_off" | "end") { this.sendJson({ t: "control", action }); }
-  frameResponse(reqId: string) { this.sendJson({ t: "frame_response", reqId }); }
+  frameResponse(reqId: string, frame?: { data?: string; mime?: string; source?: "camera" | "screen" }) {
+    this.sendJson({
+      t: "frame_response",
+      reqId,
+      ...(frame?.data ? { data: frame.data, mime: frame.mime ?? "image/jpeg" } : {}),
+      ...(frame?.source ? { source: frame.source } : {}),
+    });
+  }
   toolBridgeResult(reqId: string, output: string) { this.sendJson({ t: "tool_bridge_result", reqId, output }); }
 
+  /** Legacy binary FRAME_IN (look prefers inline base64 on frame_response). */
   sendFrame(jpeg: ArrayBuffer) {
     if (!this.ready) return;
     const out = new Uint8Array(jpeg.byteLength + 1);

@@ -12,6 +12,7 @@ import { ScreenTile } from "./ScreenTile";
 import { EndCallButton } from "./EndCallButton";
 import { TranscriptPanel } from "./TranscriptPanel";
 import { TopBar } from "./TopBar";
+import { FocusCheckIn } from "./FocusCheckIn";
 import { cn } from "@/lib/cn";
 
 const PHASE_LABEL: Record<LivePhase, string> = {
@@ -28,12 +29,15 @@ export interface InCallProps {
   getLevels: () => { mic: number; agent: number };
   getBands: () => { mic: number[]; agent: number[] };
   onEnd: () => void;
+  onFocusFine: () => void;
+  onFocusHelp: () => void;
 }
 
 export function InCall(props: InCallProps) {
   const { chatId, phase, muted, cameraOn, screenOn, cameraStream, screenStream, error,
-    toggleMute, toggleCamera, toggleScreen, setMic, setCam, getLevels, getBands, onEnd } = props;
-  const { userCaption, userPartial, agentCaption, agentCaptionMs, toolStatus, warming, tutorStatus, mics, cams, micId, camId } = useLiveStore();
+    toggleMute, toggleCamera, toggleScreen, setMic, setCam, getLevels, getBands, onEnd,
+    onFocusFine, onFocusHelp } = props;
+  const { userCaption, userPartial, agentCaption, agentCaptionMs, toolStatus, warming, tutorStatus, focusPrompt, mics, cams, micId, camId } = useLiveStore();
   const setMinimized = useUi((s) => s.setMinimized);
   const reduce = useReducedMotion();
   const sharing = cameraOn || screenOn; // orb shrinks into the bar while a visual source is on
@@ -101,6 +105,12 @@ export function InCall(props: InCallProps) {
           {screenOn && <ScreenTile stream={screenStream} />}
 
           {error && <p className="absolute inset-x-0 top-3 mx-auto max-w-md px-6 text-center text-[12.5px] text-danger">{error}</p>}
+
+          {focusPrompt && (
+            <div className="absolute inset-x-0 top-14 z-30 flex justify-center px-4">
+              <FocusCheckIn onFine={onFocusFine} onHelp={onFocusHelp} />
+            </div>
+          )}
 
           {!panelOpen && (
             <button onClick={() => setPanelOpen(true)} title="Show transcript" aria-label="Show transcript"

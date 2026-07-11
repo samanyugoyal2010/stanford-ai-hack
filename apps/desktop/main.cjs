@@ -245,12 +245,16 @@ function wireMiniIpc() {
     mainWin.setMinimumSize(940, 640);
     if (savedBounds) { mainWin.setBounds(savedBounds); savedBounds = null; }
   });
-  // Sphere stays fixed size; ignore height resize requests from older pill UI.
-  ipcMain.on("openlive:mini-size", () => {
+  // Resize the floating mini window. Sphere = 64²; Focus check-in grows taller/wider.
+  ipcMain.on("openlive:mini-size", (_e, h) => {
     if (!mainWin || !mainWin.isAlwaysOnTop()) return;
-    const b = mainWin.getBounds();
-    if (b.width === SPHERE && b.height === SPHERE) return;
-    mainWin.setBounds({ x: b.x, y: b.y, width: SPHERE, height: SPHERE }, true);
+    const height = Math.max(SPHERE, Math.round(Number(h) || SPHERE));
+    const width = height <= SPHERE + 4 ? SPHERE : Math.max(220, Math.min(280, Math.round(height * 1.75)));
+    const area = miniDisplay().workArea;
+    const x = area.x + area.width - width - 24;
+    const y = area.y + 24;
+    mainWin.setMinimumSize(SPHERE, SPHERE);
+    mainWin.setBounds({ x, y, width, height }, true);
   });
 }
 

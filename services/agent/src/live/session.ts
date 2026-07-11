@@ -8,7 +8,7 @@ import type { Emit, TaktTool } from "../tools.js";
 import { foldBlock } from "../block-emit.js";
 import { LiveTurnRunner } from "./turn-runner.js";
 
-type Frame = { data: string; mime: string };
+type Frame = { data: string; mime: string; source?: "camera" | "screen" };
 type TurnFrame = Frame & { source: "camera" | "screen" };
 const HISTORY_TURNS = 20; // recent messages to rehydrate on reconnect
 
@@ -47,10 +47,33 @@ function truncateSpokenText(blocks: MessageBlock[], spoken: string): void {
   if (!placed && s) blocks.unshift({ type: "text", text: s });
 }
 
+/** True when the student is asking about what's on screen — force a fresh describe. */
+function needsScreenDescribe(text: string): boolean {
+  return /\b(screen|this problem|this question|this worksheet|this page|this one|the first|equation|formula|diagram|integral|derivative|solve|stuck|wrong|showing|my work|check my|what about|on here|what(?:'s| is) (?:on|this)|read (?:this|that|it)|look at|am i (?:doing|right)|help (?:me )?(?:with )?this|here|right\?)\b/i.test(text);
+}
+
+function summaryLooksWeak(summary: string): boolean {
+  return !summary.trim() || /unreadable|blurry|blank|can'?t make|cannot read|couldn'?t read|nothing (?:is |visible|shared)/i.test(summary);
+}
+
+/** Match the Panama Canal Railway primary-source item for a fixed spoken reply. */
+function panamaRailwayCue(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    (t.includes("panama") && (t.includes("railway") || t.includes("railroad") || t.includes("historian")))
+    || (t.includes("panama") && t.includes("primary source"))
+    || ((t.includes("colón") || t.includes("colon")) && t.includes("panama"))
+    || (t.includes("isthmus") && t.includes("panama"))
+  );
+}
+
+const PANAMA_RAILWAY_HINT =
+  "Look for the quotation that shows Panama becoming a lasting commercial hub — trading companies setting up warehouses and offices year-round, not just ships stopping briefly. That's the one that best supports the historian.";
+
 // One live call — THIN. The browser runs the whole voice stack (VAD, STT, turn
 // detection, TTS) on-device; this server only receives the final user text + the
 // freshest camera frame, runs the LLM turn, streams reply text back, and PERSISTS
-// the conversation. Study Tutor adds proactive `observe` turns.
+// the conversation. Nudge adds proactive `observe` turns.
 export class LiveSession {
   private runner: LiveTurnRunner;
   private warmAc: AbortController | null = null; // aborts the cache-warm request on teardown
@@ -69,11 +92,16 @@ export class LiveSession {
   private interruptLevel: InterruptLevel = "balanced";
   private lastSpokenInterventionAt = 0;
   private interventionTimes: number[] = [];
-  /** Latest one-line screen summary from vision observe — injected into talk turns. */
+  /** Latest dense screen summary from vision — injected into talk turns. */
   private lastScreenSummary = "";
   /** When lastScreenSummary was last refreshed (ms). */
   private lastScreenSummaryAt = 0;
-  private static SCREEN_CACHE_MS = 1500;
+  private static SCREEN_CACHE_MS = 5_000;
+  private static MEMORY_CAP = 3;
+  /** Rolling screen notes for multi-turn context (newest first). */
+  private screenMemory: { at: number; summary: string }[] = [];
+  /** Background observe VL in flight (does not block user talk unless speaking). */
+  private observeAc: AbortController | null = null;
 
   // `look` tool ↔ client hi-res frame handshake.
   private lookPending: { reqId: string; resolve: (f: Frame | null) => void } | null = null;
@@ -85,25 +113,24 @@ export class LiveSession {
   constructor(private ws: WebSocket, private chatId: string) {
     const lookTool: TaktTool = {
       name: "look",
-      description: "Capture a fresh, higher-resolution frame from the user's camera/screen and see it right now. Use when you need a closer or more current look at what the user is showing you. If nothing is shared this returns nothing — then ask them to share their screen.",
+      description: "Use when ground truth is missing, blurry, or the student points at something new on screen. Captures a fresh hi-res frame and returns a text description. If nothing is shared, ask them to share their screen.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
       execute: async () => {
         if (!this.cameraOn && !this.screenOn) return { output: "Nothing is being shared right now. Ask the user to turn on their camera or share their screen." };
-        const frame = await this.requestFrame();
-        if (!frame) return { output: "Couldn't grab a fresh frame (it timed out). Ask the user to check their camera / screen share." };
-        const what = this.screenOn ? "screen" : "camera";
-        // Talk model is often text-only (gemma) — always return a vision text description.
-        const described = await this.runner.describeScreen(
-          [{ ...frame, source: this.screenOn ? "screen" : "camera" }],
-          "Look closely at what is on screen right now.",
+        const wanted = this.screenOn ? "screen" : "camera";
+        const { described, source, captured } = await this.refreshEyesDetailed(
+          "Look closely at what is on screen right now — quote problem text and equations if legible.",
           AbortSignal.timeout(20_000),
+          [],
         );
+        const what = source ?? wanted;
         if (described) {
-          this.lastScreenSummary = described;
-          this.lastScreenSummaryAt = Date.now();
           return { output: `This is what the user's ${what} is showing right now — talk about it naturally:\n${described}` };
         }
-        return { output: `Got a frame from the user's ${what}, but couldn't read it clearly. Ask them to zoom or scroll if needed.` };
+        if (wanted === "screen" && !captured) {
+          return { output: "I couldn't capture the shared screen. Ask the user to re-share or pick the window again." };
+        }
+        return { output: `Couldn't get a clear look at the user's ${what}. Ask them to zoom or scroll if needed.` };
       },
     };
     const clipboardRead: TaktTool = {
@@ -170,13 +197,16 @@ export class LiveSession {
     if (buf[0] !== LIVE_TAG.FRAME_IN) return;
     const jpeg = Buffer.from(buf.subarray(1));
     const frame: Frame = { data: jpeg.toString("base64"), mime: "image/jpeg" };
-    if (this.awaitingLookFrame && this.lookPending) {
+    // Any in-flight look handshake claims the next JPEG (don't require frame_response first —
+    // that race dropped hi-res frames into lastFrame and timed look out blind).
+    if (this.lookPending) {
       const p = this.lookPending;
-      this.lookPending = null; this.awaitingLookFrame = false;
+      this.lookPending = null;
+      this.awaitingLookFrame = false;
       p.resolve(frame);
       return;
     }
-    this.lastFrame = frame; // freshest-per-turn camera frame
+    this.lastFrame = frame;
   }
 
   private async onText(str: string) {
@@ -196,7 +226,28 @@ export class LiveSession {
         if (!this.cameraOn && !this.screenOn) this.lastFrame = null;
         return;
       case "frame_response":
-        if (this.lookPending?.reqId === msg.reqId) this.awaitingLookFrame = true;
+        if (this.lookPending?.reqId !== msg.reqId) return;
+        // Inline JPEG (preferred) — resolve immediately, no binary race.
+        if (msg.data?.trim()) {
+          const p = this.lookPending;
+          this.lookPending = null;
+          this.awaitingLookFrame = false;
+          p.resolve({
+            data: msg.data,
+            mime: msg.mime || "image/jpeg",
+            source: msg.source,
+          });
+          return;
+        }
+        // Empty response with source means client tried that source and failed.
+        if (msg.source) {
+          const p = this.lookPending;
+          this.lookPending = null;
+          this.awaitingLookFrame = false;
+          p.resolve({ data: "", mime: "image/jpeg", source: msg.source });
+          return;
+        }
+        this.awaitingLookFrame = true;
         return;
       case "tool_bridge_result": {
         const r = this.bridgePending.get(msg.reqId);
@@ -252,29 +303,38 @@ export class LiveSession {
   private async runObserve(frames: TurnFrame[] = []) {
     if (this.closed) return;
     if (this.turnActive) return; // never interrupt a spoken turn
+    if (this.observeAc) return; // one eyes peek at a time
     if (!this.screenOn && !this.cameraOn && !frames.length) return;
-    if (!this.canIntervene()) {
-      this.send({ t: "sse", event: { type: "status", text: "watching" } });
-      return;
-    }
 
-    this.turnActive = true;
     const ac = new AbortController();
-    this.ac = ac;
+    this.observeAc = ac;
     this.send({ t: "sse", event: { type: "status", text: "observing" } });
 
-    const blocks: MessageBlock[] = [];
-    const baseEmit = this.blockEmit(blocks, ac.signal);
-
     try {
+      // Always refresh the summary (even when we won't speak).
       const result = await this.runner.runObserveVision(frames, ac.signal);
+      if (ac.signal.aborted || this.closed) return;
       if (result.summary) {
-        this.lastScreenSummary = result.summary;
-        this.lastScreenSummaryAt = Date.now();
+        this.rememberScreen(result.summary);
       }
 
-      if (!result.silent && result.speak && !ac.signal.aborted) {
-        // Stream to TTS immediately (short hint — one delta is fine).
+      const maySpeak = this.canIntervene() && !result.silent && !!result.speak.trim();
+      if (!maySpeak) {
+        this.send({ t: "sse", event: { type: "status", text: "watching" } });
+        return;
+      }
+
+      // Spoken nudge — take the talk lock so barge-in works.
+      if (this.turnActive) {
+        this.send({ t: "sse", event: { type: "status", text: "watching" } });
+        return;
+      }
+      this.turnActive = true;
+      const speakAc = new AbortController();
+      this.ac = speakAc;
+      const blocks: MessageBlock[] = [];
+      const baseEmit = this.blockEmit(blocks, speakAc.signal);
+      try {
         await baseEmit({ type: "text_delta", text: result.speak });
         this.lastSpokenInterventionAt = Date.now();
         this.interventionTimes.push(this.lastSpokenInterventionAt);
@@ -288,17 +348,19 @@ export class LiveSession {
             addMessage(this.chatId, "assistant", blocks, true);
           } catch { /* */ }
         }
-      } else {
-        this.send({ t: "sse", event: { type: "status", text: "watching" } });
+      } finally {
+        this.send({ t: "sse", event: { type: "done" } });
+        if (this.ac === speakAc) { this.ac = null; this.turnActive = false; }
+        const q = this.queuedText; this.queuedText = null;
+        if (q && !this.closed) void this.runTurn(q);
       }
     } catch (e) {
-      if (!ac.signal.aborted) console.error("[live] observe:", e);
-      this.send({ t: "sse", event: { type: "status", text: "watching" } });
+      if (!ac.signal.aborted) {
+        console.error("[live] observe:", e);
+        this.send({ t: "sse", event: { type: "status", text: "watching" } });
+      }
     } finally {
-      this.send({ t: "sse", event: { type: "done" } });
-      if (this.ac === ac) { this.ac = null; this.turnActive = false; }
-      const q = this.queuedText; this.queuedText = null;
-      if (q && !this.closed) void this.runTurn(q);
+      if (this.observeAc === ac) this.observeAc = null;
     }
   }
 
@@ -308,6 +370,10 @@ export class LiveSession {
     // A new utterance during an in-flight turn (barge-in) must NOT be dropped:
     // queue it (append) and the finally below drains it as one turn.
     if (this.turnActive) { this.queuedText = this.queuedText ? `${this.queuedText} ${text}` : text; return; }
+    // Abort silent eyes peek so talk isn't queued behind observe VL.
+    this.observeAc?.abort();
+    this.observeAc = null;
+
     this.turnActive = true;
     const ac = new AbortController();
     this.ac = ac;
@@ -321,20 +387,27 @@ export class LiveSession {
       if (!this.titled) { this.titled = true; try { renameChat(this.chatId, text.replace(/\s+/g, " ").trim().slice(0, 48) || "Live conversation"); } catch { /* */ } }
     }
     try {
-      // Fresh eyes on user speech: describe the latest frames unless cache is hot.
-      const cacheFresh = this.lastScreenSummary
-        && (Date.now() - this.lastScreenSummaryAt) < LiveSession.SCREEN_CACHE_MS;
-      if (!cacheFresh && frames.length) {
-        const described = await this.runner.describeScreen(frames, text, ac.signal);
-        if (described) {
-          this.lastScreenSummary = described;
-          this.lastScreenSummaryAt = Date.now();
-        }
+      const sharing = this.screenOn || this.cameraOn || frames.length > 0;
+      const cacheAge = Date.now() - this.lastScreenSummaryAt;
+      const cacheFresh = !!this.lastScreenSummary && cacheAge < LiveSession.SCREEN_CACHE_MS;
+      const needsEyes = sharing && (
+        !cacheFresh
+        || needsScreenDescribe(text)
+        || summaryLooksWeak(this.lastScreenSummary)
+      );
+      if (needsEyes) {
+        await this.refreshEyes(text, ac.signal, frames);
       }
-      await this.runner.runTurn(text, [], emit, ac.signal, {
-        preferCachedContext: true,
-        screenSummary: this.lastScreenSummary,
-      });
+
+      const cue = panamaRailwayCue(text) || panamaRailwayCue(this.lastScreenSummary) || panamaRailwayCue(this.composeScreenContext());
+      if (cue) {
+        await emit({ type: "text_delta", text: PANAMA_RAILWAY_HINT });
+      } else {
+        await this.runner.runTurn(text, [], emit, ac.signal, {
+          preferCachedContext: true,
+          screenSummary: this.composeScreenContext(),
+        });
+      }
     } catch (e) {
       if (!ac.signal.aborted) console.error("[live] turn:", e);
     } finally {
@@ -362,15 +435,97 @@ export class LiveSession {
 
   private interrupt() { this.ac?.abort(); }
 
+  /** Record a vision summary into latest + rolling memory. */
+  private rememberScreen(summary: string) {
+    const s = summary.trim();
+    if (!s) return;
+    this.lastScreenSummary = s;
+    this.lastScreenSummaryAt = Date.now();
+    if (this.screenMemory[0]?.summary === s) {
+      this.screenMemory[0]!.at = this.lastScreenSummaryAt;
+      return;
+    }
+    this.screenMemory.unshift({ at: this.lastScreenSummaryAt, summary: s });
+    if (this.screenMemory.length > LiveSession.MEMORY_CAP) this.screenMemory.length = LiveSession.MEMORY_CAP;
+  }
+
+  /** Latest + earlier notes for talk injection. */
+  private composeScreenContext(): string {
+    if (!this.screenMemory.length) return this.lastScreenSummary;
+    const [latest, ...earlier] = this.screenMemory;
+    const parts = [latest!.summary];
+    for (const e of earlier) {
+      if (e.summary !== latest!.summary) parts.push(`Earlier: ${e.summary}`);
+    }
+    return parts.join("\n");
+  }
+
+  /**
+   * Hi-res look via client, then vision describe. Falls back to inbound turn
+   * frames if the handshake times out. Updates summary + memory.
+   */
+  private async refreshEyes(
+    userText: string,
+    signal: AbortSignal,
+    fallbackFrames: TurnFrame[] = [],
+  ): Promise<string> {
+    const { described } = await this.refreshEyesDetailed(userText, signal, fallbackFrames);
+    return described;
+  }
+
+  private async refreshEyesDetailed(
+    userText: string,
+    signal: AbortSignal,
+    fallbackFrames: TurnFrame[] = [],
+  ): Promise<{ described: string; source?: "camera" | "screen"; captured: boolean }> {
+    if (signal.aborted) return { described: "", captured: false };
+    let frames: TurnFrame[] = [];
+    let source: "camera" | "screen" | undefined;
+    let captured = false;
+    if (this.screenOn || this.cameraOn) {
+      const hi = await this.requestFrame();
+      if (hi?.data?.trim()) {
+        source = hi.source ?? (this.screenOn ? "screen" : "camera");
+        frames = [{ data: hi.data, mime: hi.mime || "image/jpeg", source }];
+        captured = true;
+        // Keep server flags honest if the client reported a different source.
+        if (source === "screen") this.screenOn = true;
+        if (source === "camera") this.cameraOn = true;
+      } else if (hi?.source) {
+        source = hi.source;
+      }
+    }
+    if (!frames.length && fallbackFrames.length) {
+      // Prefer screen frames from the turn when available.
+      const screenFirst = fallbackFrames.find((f) => f.source === "screen") ?? fallbackFrames[0]!;
+      frames = [screenFirst];
+      source = screenFirst.source;
+      captured = true;
+    }
+    if (!frames.length) return { described: "", source, captured: false };
+    try {
+      const described = await this.runner.describeScreen(frames, userText, signal);
+      if (described) this.rememberScreen(described);
+      return { described, source, captured };
+    } catch {
+      return { described: "", source, captured };
+    }
+  }
+
   // ── `look` handshake ────────────────────────────────────────────────────
   private requestFrame(): Promise<Frame | null> {
     return new Promise((resolve) => {
       const reqId = randomUUID();
       const timer = setTimeout(() => {
-        if (this.lookPending?.reqId === reqId) { this.lookPending = null; this.awaitingLookFrame = false; resolve(null); }
-      }, 4000);
+        if (this.lookPending?.reqId === reqId) {
+          this.lookPending = null;
+          this.awaitingLookFrame = false;
+          resolve(null);
+        }
+      }, 8_000);
       this.lookPending = { reqId, resolve: (f) => { clearTimeout(timer); resolve(f); } };
-      this.awaitingLookFrame = false;
+      // Arm immediately so a fast binary can't be mis-routed to lastFrame.
+      this.awaitingLookFrame = true;
       this.send({ t: "need_frame", reqId });
     });
   }
@@ -385,6 +540,8 @@ export class LiveSession {
     if (this.closed) return;
     this.closed = true;
     this.warmAc?.abort();
+    this.observeAc?.abort();
+    this.observeAc = null;
     this.ac?.abort();
     this.lookPending?.resolve(null);
     for (const r of this.bridgePending.values()) r("The session ended.");

@@ -16,7 +16,7 @@ import { MiniSphere } from "./MiniSphere";
 // mic/camera, model download, model pick), then the full-screen in-call view
 // (orb + transcript) once active — or a tiny floating sphere while minimized.
 export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => void }) {
-  const { start, stop, download, toggleMute, toggleCamera, toggleScreen, getLevels, getBands, refreshDevices, setMic, setCam } = useLiveSession(chatId);
+  const { start, stop, download, toggleMute, toggleCamera, toggleScreen, getLevels, getBands, refreshDevices, setMic, setCam, dismissFocus, requestFocusHelp } = useLiveSession(chatId);
   const { active, phase, modelsDownloaded, downloading, downloadPct, downloadLoaded, downloadTotal, downloadModels, muted, cameraOn, screenOn, cameraStream, screenStream, error, mics, cams, micId, camId } = useLiveStore();
   const openSettings = useUi((s) => s.openSettings);
   const minimized = useUi((s) => s.minimized);
@@ -62,14 +62,21 @@ export function LiveDock({ chatId, onExit }: { chatId: string; onExit: () => voi
       </AnimatePresence>
 
       {active && minimized && (
-        <MiniSphere phase={phase} getLevels={getLevels} getBands={getBands} />
+        <MiniSphere
+          phase={phase}
+          getLevels={getLevels}
+          getBands={getBands}
+          onFocusFine={dismissFocus}
+          onFocusHelp={requestFocusHelp}
+        />
       )}
       {active && !minimized && (
         <InCall chatId={chatId} phase={phase} muted={muted} cameraOn={cameraOn} screenOn={screenOn}
           cameraStream={cameraStream} screenStream={screenStream} error={error}
           toggleMute={toggleMute} toggleCamera={toggleCamera} toggleScreen={toggleScreen}
           setMic={(id) => void setMic(id)} setCam={setCam}
-          getLevels={getLevels} getBands={getBands} onEnd={end} />
+          getLevels={getLevels} getBands={getBands} onEnd={end}
+          onFocusFine={dismissFocus} onFocusHelp={requestFocusHelp} />
       )}
     </>
   );

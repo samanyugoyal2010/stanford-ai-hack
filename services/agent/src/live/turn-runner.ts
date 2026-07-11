@@ -6,8 +6,8 @@ import { resolveLive, resolveVision, type ResolvedLive } from "../providers.js";
 import { runWorker } from "./worker.js";
 
 const TALK_MAX_TOKENS = 384;
-const OBSERVE_MAX_TOKENS = 80;
-const DESCRIBE_MAX_TOKENS = 96;
+const OBSERVE_MAX_TOKENS = 120;
+const DESCRIBE_MAX_TOKENS = 200;
 
 type Frame = { data: string; mime: string; source?: "camera" | "screen" };
 
@@ -21,7 +21,7 @@ export async function describeFrames(
   maxTokens = DESCRIBE_MAX_TOKENS,
 ): Promise<string> {
   const messages: Message[] = [
-    { role: "system", text: `You are the eyes of a voice assistant. In 1-3 tight sentences, state exactly what is visible in the user's ${sources} right now — objects, on-screen text, layout, what the person is doing. No preamble, no "the image". If it's blank or unreadable, say so plainly.` },
+    { role: "system", text: `You are the eyes of a voice tutor. In 1-3 tight sentences, state exactly what is visible in the user's ${sources} right now. Lead with short verbatim quotes of the main problem text, numbers, and equations when legible, then problem type / layout and what the student appears to be doing. No preamble, no "the image". If blank or unreadable, say so plainly.` },
     { role: "user", text: userText ? `The user said: "${userText}". What's visible?` : "What's visible right now?", images: frames.map((f) => ({ data: f.data, mime: f.mime })) },
   ];
   const turn = await collectTurn(
@@ -76,10 +76,10 @@ const LIVE_TOOL_DENY = new Set<string>([]);
 
 const OBSERVE_VISION_PROMPT = `Look at the student's screen right now.
 Reply in EXACTLY this two-line format:
-SUMMARY: <one short factual line of what is on screen>
+SUMMARY: <one dense factual line: problem type + key on-screen text/numbers/equations (quote briefly if readable) + what the student appears to be doing>
 SPEAK: SILENCE
 or
-SUMMARY: <one short factual line>
+SUMMARY: <one dense factual line as above>
 SPEAK: <one short Socratic hint or question, one sentence>
 
 Prefer SPEAK: SILENCE when they are progressing, reading, or typing. No markdown.`;
@@ -229,10 +229,10 @@ export class LiveTurnRunner {
     let text = userText;
     let imgs: { data: string; mime: string }[] | undefined;
 
-    // Study Tutor fast path: text talk model + cached screen summary (no VL prefill).
+    // Fast path: text talk model + cached screen summary (no VL prefill).
     if (opts.preferCachedContext) {
       if (opts.screenSummary?.trim()) {
-        text = `${userText}\n\n[Recent screen context (from your eyes — talk about it naturally, don't mention "the image"): ${opts.screenSummary.trim()}]`;
+        text = `${userText}\n\n[Ground truth — what is on their screen right now (from your eyes; treat as accurate, talk about it naturally, don't mention "the image" or that you were told this): ${opts.screenSummary.trim()}]`;
       }
       // Never attach raw frames on this path — that's what made VL talk slow.
     } else if (frames.length) {
