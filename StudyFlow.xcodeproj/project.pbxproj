@@ -63,6 +63,9 @@
 		A10000000000000000BEEF02 /* PipelineActivityLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF01 /* PipelineActivityLog.swift */; };
 		A10000000000000000BEEF03 /* SocraticPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF05 /* SocraticPrompt.swift */; };
 		A10000000000000000BEEF04 /* VoiceAgentCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF06 /* VoiceAgentCoordinator.swift */; };
+		A10000000000000000BEEF08 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF07 /* MainWindowController.swift */; };
+		A10000000000000000BEEF0A /* SessionChromeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF09 /* SessionChromeController.swift */; };
+		A10000000000000000BEEF0C /* ListeningMenuBarMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000BEEF0B /* ListeningMenuBarMenu.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,6 +128,9 @@
 		A10000000000000000BEEF01 /* PipelineActivityLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineActivityLog.swift; sourceTree = "<group>"; };
 		A10000000000000000BEEF05 /* SocraticPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocraticPrompt.swift; sourceTree = "<group>"; };
 		A10000000000000000BEEF06 /* VoiceAgentCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceAgentCoordinator.swift; sourceTree = "<group>"; };
+		A10000000000000000BEEF07 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
+		A10000000000000000BEEF09 /* SessionChromeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionChromeController.swift; sourceTree = "<group>"; };
+		A10000000000000000BEEF0B /* ListeningMenuBarMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningMenuBarMenu.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -180,6 +186,8 @@
 			children = (
 				A10000000000000000000019 /* AppDependencyContainer.swift */,
 				A1000000000000000000001A /* ContentView.swift */,
+				A10000000000000000BEEF07 /* MainWindowController.swift */,
+				A10000000000000000BEEF09 /* SessionChromeController.swift */,
 				A1000000000000000000001B /* StudyFlowApp.swift */,
 			);
 			path = App;
@@ -190,6 +198,7 @@
 			children = (
 				A10000000000000000000040 /* DashboardView.swift */,
 				A10000000000000000000041 /* LearnerProfileView.swift */,
+				A10000000000000000BEEF0B /* ListeningMenuBarMenu.swift */,
 				A10000000000000000000042 /* StatusCardView.swift */,
 			);
 			path = Views;
@@ -428,7 +437,9 @@
 				A1000000000000000000004E /* LearnerProfileSynthesizer.swift in Sources */,
 				A10000000000000000000079 /* LearnerProfileView.swift in Sources */,
 				A10000000000000000000077 /* LearnerProfileViewModel.swift in Sources */,
+				A10000000000000000BEEF0C /* ListeningMenuBarMenu.swift in Sources */,
 				A1000000000000000000005A /* ManualProfileIngestor.swift in Sources */,
+				A10000000000000000BEEF08 /* MainWindowController.swift in Sources */,
 				A10000000000000000000066 /* MemoryEntry.swift in Sources */,
 				A1000000000000000000005B /* MemoryManager.swift in Sources */,
 				A1000000000000000000006E /* MemoryManaging.swift in Sources */,
@@ -443,6 +454,7 @@
 				A1000000000000000000005E /* ScreenCaptureManager.swift in Sources */,
 				A10000000000000000000070 /* ScreenCapturing.swift in Sources */,
 				A10000000000000000000068 /* ServiceStatus.swift in Sources */,
+				A10000000000000000BEEF0A /* SessionChromeController.swift in Sources */,
 				A10000000000000000BEEF03 /* SocraticPrompt.swift in Sources */,
 				A1000000000000000000005F /* SpeechRecognitionManager.swift in Sources */,
 				A10000000000000000000071 /* SpeechRecognizing.swift in Sources */,

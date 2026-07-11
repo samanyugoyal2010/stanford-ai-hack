@@ -31,6 +31,7 @@ final class AppDependencyContainer {
     let observationCoordinator: ObservationSessionCoordinator
     let manualProfileIngestor: ManualProfileIngestor
     let voiceAgent: VoiceAgentCoordinator
+    let sessionChrome: SessionChromeController
 
     init() {
         let database = SQLiteStore()
@@ -96,6 +97,7 @@ final class AppDependencyContainer {
             observation: observationCoordinator,
             database: database
         )
+        self.sessionChrome = SessionChromeController()
 
         try? database.open()
         AppLogger.shared.info("AppDependencyContainer initialized", category: .app)

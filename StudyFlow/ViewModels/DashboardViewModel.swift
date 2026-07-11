@@ -7,13 +7,17 @@ import Observation
 final class DashboardViewModel {
     private let container: AppDependencyContainer
 
-    private(set) var isSessionActive = false
     private(set) var isStarting = false
     private(set) var lastError: String?
     private(set) var ollamaReady: Bool?
 
     init(container: AppDependencyContainer) {
         self.container = container
+    }
+
+    /// True while listening chrome / voice session is active (shared with menu-bar Stop).
+    var isSessionActive: Bool {
+        container.sessionChrome.isListeningChromeActive
     }
 
     var screenCaptureStatus: ServiceStatus {
@@ -83,12 +87,12 @@ final class DashboardViewModel {
         do {
             try await container.observationCoordinator.startSession()
             try await container.voiceAgent.start()
-            isSessionActive = true
+            container.sessionChrome.enterListeningMode()
         } catch {
             lastError = error.localizedDescription
             await container.voiceAgent.stop()
             _ = try? await container.observationCoordinator.stopSession(extractProfile: false)
-            isSessionActive = false
+            container.sessionChrome.isListeningChromeActive = false
         }
     }
 
@@ -97,13 +101,10 @@ final class DashboardViewModel {
             return
         }
         lastError = nil
-        await container.voiceAgent.stop()
-        do {
-            _ = try await container.observationCoordinator.stopSession(extractProfile: false)
-        } catch {
-            lastError = error.localizedDescription
-        }
-        isSessionActive = false
+        await container.sessionChrome.stopListeningSession(
+            voiceAgent: container.voiceAgent,
+            observation: container.observationCoordinator
+        )
     }
 }
 
