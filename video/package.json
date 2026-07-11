@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
-    "chrome": "bash ./open-in-chrome.sh"
+    "chrome": "bash ./open-in-chrome.sh",
+    "open": "bash ./open-dist-in-chrome.sh"
   },
   "dependencies": {
     "motion": "^12.23.0",
