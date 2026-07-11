@@ -24,8 +24,10 @@ struct OllamaClient {
         return try JSONDecoder().decode(ChatResponse.self, from: data).message.content
     }
 
-    func inferScene(prompt: String) async throws -> SceneSpec {
-        let request = try makeRequest(path: "api/generate", body: ["model": model, "prompt": prompt + " Return JSON only.", "format": "json", "stream": false])
+    func inferScene(image: NSImage?, prompt: String) async throws -> SceneSpec {
+        var body: [String: Any] = ["model": model, "prompt": prompt + " Return JSON only.", "format": "json", "stream": false]
+        if let image, let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let data = bitmap.representation(using: .png, properties: [:]) { body["images"] = [data.base64EncodedString()] }
+        let request = try makeRequest(path: "api/generate", body: body)
         let (data, _) = try await URLSession.shared.data(for: request)
         let raw = try JSONDecoder().decode(GenerateResponse.self, from: data).response.data(using: .utf8) ?? Data()
         return try JSONDecoder().decode(SceneSpec.self, from: raw)

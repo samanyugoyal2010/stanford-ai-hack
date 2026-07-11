@@ -10,7 +10,6 @@ final class VoiceAgent: NSObject, ObservableObject {
     @Published var transcript = ""
 
     func start() throws {
-        AVAudioSession.sharedInstance().requestRecordPermission { _ in }
         SFSpeechRecognizer.requestAuthorization { _ in }
         transcript = ""; request = SFSpeechAudioBufferRecognitionRequest(); guard let request else { return }
         let input = audioEngine.inputNode; input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in request.append(buffer) }

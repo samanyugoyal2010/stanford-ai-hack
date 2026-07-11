@@ -53,7 +53,7 @@ final class WorkspaceModel: ObservableObject {
         isThinking = true
         Task {
             do {
-                let spec = try await ollama.inferScene(prompt: "Analyze this diagram as a coarse 3D scene. Return JSON with objects, each having name, primitive (box, sphere, cylinder, plane), position [x,y,z], scale [x,y,z], and color hex. Prefer a simple editable approximation.")
+                let spec = try await ollama.inferScene(image: selectedImage, prompt: "Analyze this diagram as a coarse 3D scene. Return JSON with objects, each having name, primitive (box, sphere, cylinder, plane), position [x,y,z], scale [x,y,z], and color hex. Prefer a simple editable approximation.")
                 sceneSpec = spec
                 messages.append(ChatMessage(role: .assistant, text: "I made an editable 3D draft from the diagram. You can orbit it in the preview.") )
             } catch { sceneSpec = .default; errorMessage = "The model response was not usable, so Lunar created a starter scene instead." }
