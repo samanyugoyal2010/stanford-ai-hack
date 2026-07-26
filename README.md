@@ -72,4 +72,4 @@ Spoken turns do **not** re-send full screen frames to the vision model every tim
 
 ## Upstream OpenLive
 
-Voice + vision plumbing and desktop shell come from OpenLive (MIT). This product rebrands as Nudge: quiet screen tutoring, dual Ollama Talk/Eyes defaults, and the floating sphere.
+Voice  vision plumbing and desktop shell come from OpenLive (MIT). This product rebrands as Nudge: quiet screen tutoring, dual Ollama Talk/Eyes defaults, and the floating sphere.
