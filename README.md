@@ -1,29 +1,20 @@
-# Lunar Electron Desktop Assistant
+# Nudge Keynote Website
 
-Lunar is an Electron/Node.js macOS desktop assistant for local Ollama chat, push-to-talk speech recognition, diagram uploads, and coarse editable 3D scene drafts rendered with Three.js.
+Nudge is now presented as a polished, full-screen keynote website focused on calm, premium product storytelling and controlled scene-by-scene navigation.
 
 ## Run locally
 
 ```bash
 npm install
-ollama serve
-ollama list
-npm start
+npm run web
 ```
 
-The app expects Ollama at `http://127.0.0.1:11434` and defaults to the model tag `gemma4:e2b-it-qat`. If your downloaded model uses another tag:
+Open the site at `http://localhost:4173`.
 
-```bash
-LUNAR_OLLAMA_MODEL=your-model-tag npm start
-```
-
-The model name is read by the Electron main process, keeping Ollama access outside the renderer. Upload an image, then choose `Generate 3D draft`; the result is a simple JSON scene made of boxes, spheres, and cylinders that can be orbited in the preview.
-
-For higher-fidelity anatomy, choose `Find accurate model`. Lunar loads the NIH 3D `VH_M_Heart.glb` reference asset from the NIH 3D media store. Treat downloaded third-party assets according to their source license and attribution requirements.
+Remark: this branch is intentionally scoped to the website experience, so the old Electron assistant behavior is no longer the focus of the README.
 
 ## Development
 
 ```bash
 npm run check
-npm run dev
 ```
